@@ -3,6 +3,8 @@ import socket
 import os
 from _thread import *
 
+from ..crypto import main
+
 
 def multi_threaded_client(connection):
     connection.send(str.encode("Server is working:"))
