@@ -1,3 +1,5 @@
+import hashlib
+import random
 import base64
 import json
 import os
@@ -6,6 +8,9 @@ import socket
 from _thread import *
 from cryptographicio import rsa_
 import rsa
+from cryptographicio import aes
+
+from database import user_database
 
 from cryptographicio import aes
 from database import user_database
@@ -44,6 +49,27 @@ def decrypt_message(encrypted_message, self_private_key, destination_public_key)
     return message
 
 
+def calculate_sha256_hash(string):
+    sha256_hash = hashlib.sha256()
+    sha256_hash.update(string.encode('utf-8'))
+    hash_result = sha256_hash.hexdigest()
+    return hash_result
+
+
+def handle_register(message, self_private_key):
+    username = message['username']
+    password = message['password']
+    public_key = message['public_key']
+    salt = f'{random.randint(1_000_000,9_999_999)}'
+    password_hash = calculate_sha256_hash(password + salt)
+    if user_database.register_user(username, password_hash, salt):
+        response_message = {'status': 'OK', 'error_message':''}
+    else:
+        response_message =  {'status': 'OK', 'error_message':'Username already exists'}
+
+    encrypted_message = encrypt_message(response_message, self_private_key, public_key)
+    return encrypt_message
+
 def reply_response(connection, self_private_key):
     request_text = ""
     while True:
@@ -52,7 +78,9 @@ def reply_response(connection, self_private_key):
             break
         request_text += data.decode()
     decrypted_message = decrypt_message(request_text, PR, PU)
-
+    if decrypted_message["procedure"] == "register":
+        response = handle_register(decrypted_message["message"])
+        connection.sendall(response)
     if decrypted_message["procedure"] == "handshake":
         response = handle_handshake(decrypted_message["message"], self_private_key)
         connection.sendall(response)
