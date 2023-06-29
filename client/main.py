@@ -1,4 +1,3 @@
-import sys
 import base64
 import json
 import os
@@ -6,7 +5,9 @@ import random
 from pathlib import Path
 import socket
 from cryptographicio import rsa_
-
+from cryptographicio import hash_lib
+from database import initialize_database
+from database import salt_database
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -84,6 +85,7 @@ def handshake(self_public_key, self_private_key, server_public_key):
         raise Exception("This message is not Fresh!")
     return response_message["key"]
 
+
 def handle_register(server_public_key):
     username = input("Username: ")
     password = input("Password: ")
@@ -97,12 +99,54 @@ def handle_register(server_public_key):
         rsa_.write_keys(PU, PR, key_path, password)
     print(PU)
     self_public_key_string = base64.b64encode(PU.save_pkcs1("PEM")).decode()
-    response = send_request("register", {'username': username, 'password': password, 'public_key': self_public_key_string}, PR, server_public_key)   
+    response = send_request("register",
+                            {'username': username, 'password': password, 'public_key': self_public_key_string},
+                            PR,
+                            server_public_key)
     response = json.loads(response)
     if response['status'] == 'OK':
+        salt = response['success_message']
+
+        database_path = Path(f"client/database/databases/{username}")
+        if not os.path.exists(database_path):
+            os.mkdir(database_path)
+
+        initialize_database.create_tables(database_path, f'{username}.db')
+        salt_database.store_salt(salt, database_path, f'{username}.db')
+
         print('Successfully registered')
+
     else:
         print(response['error_message'])
+
+
+def handle_login(server_public_key):
+    global PR
+    username = input("Username: ")
+    password = input("Password: ")
+    if not os.path.exists(os.path.join(Path(f"client/database/databases/{username}"), f'{username}.db')):
+        print("local database does not exists. please register first")
+        return
+
+    salt, = salt_database.get_salt(Path(f"client/database/databases/{username}"), f'{username}.db')
+    print(salt)
+    hashed_password = hash_lib.calculate_sha256_hash(password + salt)
+
+    key_path = Path(f"client/keys/client/{username}")
+    if os.path.exists(key_path):
+        PR = rsa_.load_private_key(key_path, password)
+
+    response = send_request("login", {'username': username, 'hashed_password': hashed_password}, PR,
+                            server_public_key)
+
+    response = json.loads(response)
+    if response['status'] == 'OK':
+        token = response['token']
+        print('Successfully logged in')
+
+    else:
+        print(response['error_message'])
+
 
 def main():
     global SERVER_PU, PU, PR
@@ -112,12 +156,8 @@ def main():
         command = input()
         if command == 'register':
             handle_register(SERVER_PU)
-            
-
-            
-
-        
-        
+        elif command == 'login':
+            handle_login(SERVER_PU)
 
 
 if __name__ == "__main__":

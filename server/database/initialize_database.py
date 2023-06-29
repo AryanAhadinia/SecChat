@@ -1,8 +1,8 @@
-import group_database
-import group_member_database
-import key_ring_database
-import message_database
-import user_database
+from database import group_database
+from database import group_member_database
+from database import key_ring_database
+from database import message_database
+from database import user_database
 
 
 def create_tables():

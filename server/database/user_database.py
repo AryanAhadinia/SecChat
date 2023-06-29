@@ -14,19 +14,23 @@ def create_database():
 def register_user(username, hashed_password, salt):
     sql = """SELECT * from USER WHERE username = ?"""
     args = (username,)
-    result = database.execute_sql(sql,args)
+    result = database.execute_sql(sql, args)
     if len(result) != 0:
         return False
-    
 
     sql = """INSERT INTO USER (username, hashed_password, salt) 
                     VALUES (?, ?, ?)"""
     args = (username, hashed_password, salt)
 
     database.execute_sql(sql, args)
-    
+
     return True
 
-#
-# database.create_database()
-# database.register_user("h", "i", "dd")
+
+def login_user(username, hashed_password):
+    sql = """SELECT * from USER WHERE username = ? and hashed_password = ?"""
+    args = (username, hashed_password)
+    result = database.execute_sql(sql, args)
+    if len(result) != 0:
+        return True
+    return False
