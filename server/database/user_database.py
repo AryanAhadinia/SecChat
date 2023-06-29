@@ -12,11 +12,20 @@ def create_database():
 
 
 def register_user(username, hashed_password, salt):
+    sql = """SELECT * from USER WHERE username = ?"""
+    args = (username)
+    cur = database.execute_sql(sql,args)
+    if len(cur.fetchall()) != 0:
+        return False
+    
+
     sql = """INSERT INTO USER (username, hashed_password, salt) 
                     VALUES (?, ?, ?)"""
     args = (username, hashed_password, salt)
 
     database.execute_sql(sql, args)
+    
+    return True
 
 #
 # database.create_database()

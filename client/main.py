@@ -1,3 +1,4 @@
+import sys
 import base64
 import json
 import os
@@ -5,6 +6,7 @@ import random
 from pathlib import Path
 import socket
 from cryptographicio import rsa_
+
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -85,27 +87,39 @@ def handshake(self_public_key, self_private_key, server_public_key):
         raise Exception("This message is not Fresh!")
     return response_message["key"]
 
+def handle_register(server_public_key):
+    username = input("Username: ")
+    password = input("Password: ")
+    key_path = Path(f"client/keys/client/{username}")
+    if os.path.exists(key_path):
+        PU = rsa_.load_public_key(key_path)
+        PR = rsa_.load_private_key(key_path, password)
+    else:
+        os.mkdir(key_path)
+        PU, PR = rsa_.generate_keypair()
+        rsa_.write_keys(PU, PR, key_path, password)
+
+    response = send_request("register", {'username': username, 'password': password, 'public_key': PU}, PR, server_public_key)   
+    
+    if response['status'] == 'OK':
+        print('Successfully registered')
+    else:
+        print(response['error_message'])
 
 def main():
     global SERVER_PU, PU, PR
     SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
 
     while True:
-        username = input("Username: ")
-        password = input("Password: ")
-        key_path = Path(f"client/keys/client/{username}")
-        if os.path.exists(key_path):
-            PU = rsa_.load_public_key(key_path)
-            PR = rsa_.load_private_key(key_path, password)
-        else:
-            os.mkdir(key_path)
-            PU, PR = rsa_.generate_keypair()
-            rsa_.write_keys(PU, PR, key_path, password)
+        command = input()
+        if command == 'register':
+            handle_register(SERVER_PU)
+            
 
-        handshake(PU, PR, SERVER_PU)
-        # response = send_request("/login", {"username": username, "password": password}, PR, SERVER_PU)
-        # if response == "success":
-        #     break
+            
+
+        
+        
 
 
 if __name__ == "__main__":
