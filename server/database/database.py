@@ -6,4 +6,6 @@ def execute_sql(sql, args):
     cursor = conn.cursor()
     cursor.execute(sql, args)
     conn.commit()
+    result = cursor.fetchall() 
     conn.close()
+    return result

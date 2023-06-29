@@ -45,12 +45,10 @@ def send_receive(message, host, port):
     response = ""
     server_socket = socket.socket()
     server_socket.connect((host, port))
-    server_socket.sendall(message.encode())
-    while True:
-        data = server_socket.recv(1024)
-        if not data:
-            break
-        response += data.decode()
+    server_socket.sendall(message.encode('utf-8'))
+    data = server_socket.recv(1024)
+    print(data)
+    response += data.decode()
     server_socket.close()
     return response
 
@@ -97,9 +95,10 @@ def handle_register(server_public_key):
         os.mkdir(key_path)
         PU, PR = rsa_.generate_keypair()
         rsa_.write_keys(PU, PR, key_path, password)
-
-    response = send_request("register", {'username': username, 'password': password, 'public_key': PU}, PR, server_public_key)   
-    
+    print(PU)
+    self_public_key_string = base64.b64encode(PU.save_pkcs1("PEM")).decode()
+    response = send_request("register", {'username': username, 'password': password, 'public_key': self_public_key_string}, PR, server_public_key)   
+    response = json.loads(response)
     if response['status'] == 'OK':
         print('Successfully registered')
     else:

@@ -1,4 +1,4 @@
-import database
+from database import database
 
 
 def create_database():
@@ -13,9 +13,9 @@ def create_database():
 
 def register_user(username, hashed_password, salt):
     sql = """SELECT * from USER WHERE username = ?"""
-    args = (username)
-    cur = database.execute_sql(sql,args)
-    if len(cur.fetchall()) != 0:
+    args = (username,)
+    result = database.execute_sql(sql,args)
+    if len(result) != 0:
         return False
     
 
