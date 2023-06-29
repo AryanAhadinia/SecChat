@@ -1,27 +1,56 @@
 import argparse
+import json
 import socket
 
 
-def main():
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-p", "--port", type=int, help="Port number", default=2004)
-    arg_parser.add_argument("-h", "--host", type=str, help="Host", default="127.0.0.1")
-    args = arg_parser.parse_args()
-    port = args.port
-    host = args.host
+from ..cryptographicio import rsa
 
-    client_multi_socket = socket.socket()
-    try:
-        client_multi_socket.connect((host, port))
-    except socket.error as e:
-        print(str(e))
-    res = client_multi_socket.recv(1024)
+
+HOST = "127.0.0.1"
+UPSTREAM_PORT = 8080
+DOWNSTREAM_PORT = 8085
+
+SERVER_PU = rsa.load_public_key("keys/rsa.pub")
+
+
+def request(address, payload):
+    """
+    This function is for HTTP like request to the server
+    """
+    server_socket = socket.socket()
+    server_socket.connect((HOST, UPSTREAM_PORT))
+    # creating http like message
+    http_like_message = {
+        "address": address,
+        "payload": payload,
+    }
+    http_like_message_json = json.dumps(http_like_message)
+    # signing message with client's private key
+    signed_message = {
+        "message": http_like_message_json,
+        "signature": rsa.sign(http_like_message_json, PR),
+        "public_key": PU,
+    }
+    signed_message_json = json.dumps(signed_message)
+    # encrypting message with server's public key
+    encrypted_message = rsa.encrypt(signed_message_json, SERVER_PU)
+    # sending message to the server
+    server_socket.sendall(encrypted_message.encode())
+    # receiving response from the server
+    res = ""
     while True:
-        Input = input("Hey there: ")
-        client_multi_socket.send(str.encode(Input))
-        res = client_multi_socket.recv(1024)
-        print(res.decode("utf-8"))
-    client_multi_socket.close()
+        data = server_socket.recv(1024)
+        if not data:
+            break
+        res += data
+    server_socket.close()
+    return res
+
+
+def main():
+    server_socket = establish_connection(host, port)
+
+    message
 
 
 if __name__ == "__main__":
