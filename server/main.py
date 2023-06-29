@@ -5,7 +5,7 @@ from pathlib import Path
 import socket
 from _thread import *
 from cryptographicio import rsa
-
+from server.cryptographicio import aes
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -42,7 +42,7 @@ def decrypt_message(encrypted_message, self_private_key, destination_public_key)
     return message
 
 
-def reply_reponse(connection):
+def reply_response(connection, self_private_key):
     request_text = ""
     while True:
         data = connection.recv(1024)
@@ -51,17 +51,30 @@ def reply_reponse(connection):
         request_text += data.decode()
     decrypted_message = decrypt_message(request_text, PR, PU)
 
+    if decrypted_message["procedure"] == "handshake":
+        response = handle_handshake(decrypted_message["message"], self_private_key)
+        connection.sendall(response)
+
+
+def handle_handshake(message, self_private_key):
+    nonce = message["Nonce"]
+    public_key = base64.b64decode(message["key"])
+    session_key = aes.generate_key()
+    response_message = {"Nonce": nonce, "key": session_key}
+    encrypted_message = encrypt_message(response_message, self_private_key, public_key)
+    return encrypted_message
+
 
 def main():
-    socket = socket.socket()
+    connection_socket = socket.socket()
     try:
-        socket.bind((HOST, UPSTREAM_PORT))
+        connection_socket.bind((HOST, UPSTREAM_PORT))
         print("Socket is listening ...")
-        socket.listen(5)
+        connection_socket.listen(5)
         while True:
-            connection, address = socket.accept()
+            connection, address = connection_socket.accept()
             print("Connected to: " + address[0] + ":" + str(address[1]))
-            start_new_thread(reply_reponse, (connection,))
+            start_new_thread(reply_response, (connection, PR,))
     except socket.error as e:
         print(str(e))
 

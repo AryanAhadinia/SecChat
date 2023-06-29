@@ -23,7 +23,7 @@ def load_public_key(path):
 
 
 def encrypt(message, pu):
-    blocks = [message[i : i + 117] for i in range(0, len(message), 117)]
+    blocks = [message[i: i + 117] for i in range(0, len(message), 117)]
     ciphertext = b""
     for block in blocks:
         ciphertext += rsa.encrypt(block.encode(), pu)
@@ -31,7 +31,7 @@ def encrypt(message, pu):
 
 
 def decrypt(ciphertext, pr):
-    blocks = [ciphertext[i : i + 128] for i in range(0, len(ciphertext), 128)]
+    blocks = [ciphertext[i: i + 128] for i in range(0, len(ciphertext), 128)]
     message = b""
     for block in blocks:
         message += rsa.decrypt(block, pr)

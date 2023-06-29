@@ -1,10 +1,10 @@
 import base64
 import json
 import os
+import random
 from pathlib import Path
 import socket
-from cryptographicio import rsa
-
+from cryptographicio import rsa_
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -15,11 +15,11 @@ def encrypt_message(message, username, self_private_key, destination_public_key)
     signed_message = {
         "message": message,
         "username": username,
-        "signature": base64.b64encode(rsa.sign(message, self_private_key)).decode(),
+        "signature": base64.b64encode(rsa_.sign(message, self_private_key)).decode(),
     }
     signed_message_json = json.dumps(signed_message)
     encrypted_message = base64.b64encode(
-        rsa.encrypt(
+        rsa_.encrypt(
             signed_message_json,
             destination_public_key,
         )
@@ -28,23 +28,23 @@ def encrypt_message(message, username, self_private_key, destination_public_key)
 
 
 def decrypt_message(encrypted_message, self_private_key, destination_public_key):
-    signed_message_json = rsa.decrypt(
+    signed_message_json = rsa_.decrypt(
         base64.b64decode(encrypted_message),
         self_private_key,
     )
     signed_message = json.loads(signed_message_json)
     message = signed_message["message"]
     signature = base64.b64decode(signed_message["signature"])
-    if not rsa.verify(message, signature, destination_public_key):
+    if not rsa_.verify(message, signature, destination_public_key):
         raise Exception("Signature is not valid")
     return message
 
 
-def send_recieve(messege, host, port):
-    server_socket.sendall(messege.encode())
+def send_receive(message, host, port):
     response = ""
     server_socket = socket.socket()
     server_socket.connect((host, port))
+    server_socket.sendall(message.encode())
     while True:
         data = server_socket.recv(1024)
         if not data:
@@ -65,7 +65,7 @@ def send_request(procedure, payload, self_private_key, destination_public_key):
         self_private_key,
         destination_public_key,
     )
-    encrypted_response = send_recieve(encrypted_message, HOST, UPSTREAM_PORT)
+    encrypted_response = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
     response = decrypt_message(
         encrypted_response,
         self_private_key,
@@ -74,23 +74,38 @@ def send_request(procedure, payload, self_private_key, destination_public_key):
     return response
 
 
+def handshake(self_public_key, self_private_key, server_public_key):
+    nonce = random.randint(1_000_000_000, 9_999_999_999)
+    self_public_key_string = base64.b64encode(self_public_key).decode()
+    response_message = \
+        send_request("handshake", {"Nonce": nonce, "PU": self_public_key_string}, self_private_key, server_public_key)[
+            "message"]
+    nonce_from_server = response_message["Nonce"]
+    if nonce != nonce_from_server:
+        raise Exception("This message is not Fresh!")
+    return response_message["key"]
+
+
 def main():
     global SERVER_PU, PU, PR
-    SERVER_PU = rsa.load_public_key(Path("client/keys/server"))
+    SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
+
     while True:
         username = input("Username: ")
         password = input("Password: ")
         key_path = Path(f"client/keys/client/{username}")
         if os.path.exists(key_path):
-            PU = rsa.load_public_key(key_path)
-            PR = rsa.load_private_key(key_path, password)
+            PU = rsa_.load_public_key(key_path)
+            PR = rsa_.load_private_key(key_path, password)
         else:
             os.mkdir(key_path)
-            PU, PR = rsa.generate_keypair()
-            rsa.write_keys(PU, PR, key_path, password)
-        response = request("/login", {"username": username, "password": password})
-        if response == "success":
-            break
+            PU, PR = rsa_.generate_keypair()
+            rsa_.write_keys(PU, PR, key_path, password)
+
+        handshake(PU, PR, SERVER_PU)
+        # response = send_request("/login", {"username": username, "password": password}, PR, SERVER_PU)
+        # if response == "success":
+        #     break
 
 
 if __name__ == "__main__":

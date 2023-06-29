@@ -1,3 +1,9 @@
+USER -> SERVER HANDSHAKE_CLIENT_HELLO   HTTPSL      Nonce, public_key
+SERVER -> USER HANDSHAKE_SERVER_HELLO   HTTPSL      Nonce, session key
+
+------------------------------------------------------
+
+
 USER -> SERVER  REGISTER                HTTPSL      username, password, public_key
 USER -> SERVER  LOGIN                   HTTPSL      username, password
 USER -> SERVER  LOGOUT                  HTTPSL      
