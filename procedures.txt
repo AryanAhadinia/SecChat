@@ -1,0 +1,24 @@
+USER -> SERVER  REGISTER                HTTPSL      username, password, public_key
+USER -> SERVER  LOGIN                   HTTPSL      username, password
+USER -> SERVER  LOGOUT                  HTTPSL      
+
+USER -> SERVER  GET_ONLINE_USERS        HTTPSL      
+
+USER -> SERVER  CREATE_GROUP            HTTPSL
+USER -> SERVER  ADD_USER_TO_GROUP       HTTPSL
+USER -> SERVER  REMOVE_USER_FROM_GROUP  HTTPSL
+USER -> SERVER  GET_GROUP_MEMBERS       HTTPSL
+
+USER -> SERVER  GET_KEYRING_FOR_ID      HTTPSL
+USER -> SERVER  SEND_MESSAGE            HTTPSL
+USSR -> SERVER  SET_DH_PARAMS           HTTPSL
+USER -> SERVER  GET_DH_PARAMS_FOR_ID    HTTPSL
+
+USER -> SERVER  GET_USER_GROUPS         HTTPSL
+
+USER -> SERVER  RESET_KEY               HTTPSL
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+SERVER -> USER  SEND_UNREAD_MESSAGES    DSTR
+SERVER -> USER  REQUEST_DH_PARAMS       DSTR
