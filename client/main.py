@@ -1,56 +1,96 @@
-import argparse
+import base64
 import json
+import os
+from pathlib import Path
 import socket
-
-
-from ..cryptographicio import rsa
+from cryptographicio import rsa
 
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
 
-SERVER_PU = rsa.load_public_key("keys/rsa.pub")
 
-
-def request(address, payload):
-    """
-    This function is for HTTP like request to the server
-    """
-    server_socket = socket.socket()
-    server_socket.connect((HOST, UPSTREAM_PORT))
-    # creating http like message
-    http_like_message = {
-        "address": address,
-        "payload": payload,
-    }
-    http_like_message_json = json.dumps(http_like_message)
-    # signing message with client's private key
+def encrypt_message(message, username, self_private_key, destination_public_key):
     signed_message = {
-        "message": http_like_message_json,
-        "signature": rsa.sign(http_like_message_json, PR),
-        "public_key": PU,
+        "message": message,
+        "username": username,
+        "signature": base64.b64encode(rsa.sign(message, self_private_key)).decode(),
     }
     signed_message_json = json.dumps(signed_message)
-    # encrypting message with server's public key
-    encrypted_message = rsa.encrypt(signed_message_json, SERVER_PU)
-    # sending message to the server
-    server_socket.sendall(encrypted_message.encode())
-    # receiving response from the server
-    res = ""
+    encrypted_message = base64.b64encode(
+        rsa.encrypt(
+            signed_message_json,
+            destination_public_key,
+        )
+    ).decode()
+    return encrypted_message
+
+
+def decrypt_message(encrypted_message, self_private_key, destination_public_key):
+    signed_message_json = rsa.decrypt(
+        base64.b64decode(encrypted_message),
+        self_private_key,
+    )
+    signed_message = json.loads(signed_message_json)
+    message = signed_message["message"]
+    signature = base64.b64decode(signed_message["signature"])
+    if not rsa.verify(message, signature, destination_public_key):
+        raise Exception("Signature is not valid")
+    return message
+
+
+def send_recieve(messege, host, port):
+    server_socket.sendall(messege.encode())
+    response = ""
+    server_socket = socket.socket()
+    server_socket.connect((host, port))
     while True:
         data = server_socket.recv(1024)
         if not data:
             break
-        res += data
+        response += data.decode()
     server_socket.close()
-    return res
+    return response
+
+
+def send_request(procedure, payload, self_private_key, destination_public_key):
+    http_like_message = {
+        "procedure": procedure,
+        "payload": payload,
+    }
+    http_like_message_json = json.dumps(http_like_message)
+    encrypted_message = encrypt_message(
+        http_like_message_json,
+        self_private_key,
+        destination_public_key,
+    )
+    encrypted_response = send_recieve(encrypted_message, HOST, UPSTREAM_PORT)
+    response = decrypt_message(
+        encrypted_response,
+        self_private_key,
+        destination_public_key,
+    )
+    return response
 
 
 def main():
-    server_socket = establish_connection(host, port)
-
-    message
+    global SERVER_PU, PU, PR
+    SERVER_PU = rsa.load_public_key(Path("client/keys/server"))
+    while True:
+        username = input("Username: ")
+        password = input("Password: ")
+        key_path = Path(f"client/keys/client/{username}")
+        if os.path.exists(key_path):
+            PU = rsa.load_public_key(key_path)
+            PR = rsa.load_private_key(key_path, password)
+        else:
+            os.mkdir(key_path)
+            PU, PR = rsa.generate_keypair()
+            rsa.write_keys(PU, PR, key_path, password)
+        response = request("/login", {"username": username, "password": password})
+        if response == "success":
+            break
 
 
 if __name__ == "__main__":
