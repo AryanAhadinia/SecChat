@@ -1,6 +1,5 @@
 from Crypto.Cipher import AES
 
-
 def generate_key():
     return AES.new().key
 

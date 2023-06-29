@@ -11,10 +11,9 @@ UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
 
 
-def encrypt_message(message, username, self_private_key, destination_public_key):
+def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
         "message": message,
-        "username": username,
         "signature": base64.b64encode(rsa_.sign(message, self_private_key)).decode(),
     }
     signed_message_json = json.dumps(signed_message)
@@ -76,7 +75,7 @@ def send_request(procedure, payload, self_private_key, destination_public_key):
 
 def handshake(self_public_key, self_private_key, server_public_key):
     nonce = random.randint(1_000_000_000, 9_999_999_999)
-    self_public_key_string = base64.b64encode(self_public_key).decode()
+    self_public_key_string = base64.b64encode(self_public_key.save_pkcs1("PEM")).decode()
     response_message = \
         send_request("handshake", {"Nonce": nonce, "PU": self_public_key_string}, self_private_key, server_public_key)[
             "message"]

@@ -4,9 +4,11 @@ import os
 from pathlib import Path
 import socket
 from _thread import *
-from cryptographicio import rsa
-from server.cryptographicio import aes
+from cryptographicio import rsa_
+import rsa
 
+from cryptographicio import aes
+from database import user_database
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
@@ -17,11 +19,11 @@ PU, PR = None, None
 def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
         "message": message,
-        "signature": base64.b64encode(rsa.sign(message, self_private_key)).decode(),
+        "signature": base64.b64encode(rsa_.sign(message, self_private_key)).decode(),
     }
     signed_message_json = json.dumps(signed_message)
     encrypted_message = base64.b64encode(
-        rsa.encrypt(
+        rsa_.encrypt(
             signed_message_json,
             destination_public_key,
         )
@@ -30,14 +32,14 @@ def encrypt_message(message, self_private_key, destination_public_key):
 
 
 def decrypt_message(encrypted_message, self_private_key, destination_public_key):
-    signed_message_json = rsa.decrypt(
+    signed_message_json = rsa_.decrypt(
         base64.b64decode(encrypted_message),
         self_private_key,
     )
     signed_message = json.loads(signed_message_json)
     message = signed_message["message"]
     signature = base64.b64decode(signed_message["signature"])
-    if not rsa.verify(message, signature, destination_public_key):
+    if not rsa_.verify(message, signature, destination_public_key):
         raise Exception("Signature is not valid")
     return message
 
@@ -58,10 +60,11 @@ def reply_response(connection, self_private_key):
 
 def handle_handshake(message, self_private_key):
     nonce = message["Nonce"]
-    public_key = base64.b64decode(message["key"])
+    public_key = rsa.PrivateKey.load_pkcs1(base64.b64decode(message["key"]))
     session_key = aes.generate_key()
     response_message = {"Nonce": nonce, "key": session_key}
     encrypted_message = encrypt_message(response_message, self_private_key, public_key)
+    print(nonce)
     return encrypted_message
 
 
