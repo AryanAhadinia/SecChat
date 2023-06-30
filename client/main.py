@@ -6,12 +6,15 @@ from pathlib import Path
 import socket
 from cryptographicio import rsa_
 from cryptographicio import hash_lib
+from cryptographicio import nonce_lib
 from database import initialize_database
 from database import salt_database
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
+TOKEN = None
+SESSION_KEY = None
 
 
 def encrypt_message(message, self_private_key, destination_public_key):
@@ -121,7 +124,7 @@ def handle_register(server_public_key):
 
 
 def handle_login(server_public_key):
-    global PR
+    global PR, TOKEN, SESSION_KEY
     username = input("Username: ")
     password = input("Password: ")
     if not os.path.exists(os.path.join(Path(f"client/database/databases/{username}"), f'{username}.db')):
@@ -129,20 +132,25 @@ def handle_login(server_public_key):
         return
 
     salt, = salt_database.get_salt(Path(f"client/database/databases/{username}"), f'{username}.db')
-    print(salt)
     hashed_password = hash_lib.calculate_sha256_hash(password + salt)
+    nonce = nonce_lib.generate_nonce()
 
     key_path = Path(f"client/keys/client/{username}")
     if os.path.exists(key_path):
         PR = rsa_.load_private_key(key_path, password)
 
-    response = send_request("login", {'username': username, 'hashed_password': hashed_password}, PR,
+    response = send_request("login", {'username': username, 'hashed_password': hashed_password,
+                                      'nonce': nonce}, PR,
                             server_public_key)
 
     response = json.loads(response)
     if response['status'] == 'OK':
-        token = response['token']
-        print('Successfully logged in')
+        if response['nonce'] == nonce:
+            TOKEN = response['token']
+            print(token)
+            print('Successfully logged in')
+        else:
+            print("An old message was received in response of login request")
 
     else:
         print(response['error_message'])

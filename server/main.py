@@ -24,7 +24,7 @@ UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
 
 PU, PR = None, None
-TOKENS = dict()
+TOKENS_MAPPING = dict()
 
 
 def encrypt_message(message, self_private_key, destination_public_key):
@@ -73,12 +73,13 @@ def handle_register(message, self_private_key, public_key):
 def handle_login(message, self_private_key, public_key):
     username = message['username']
     hashed_password = message['hashed_password']
+    nonce = message['nonce']
 
     if user_database.login_user(username, hashed_password):
         new_token = token.generate_token()
-        TOKENS[username] = new_token
+        TOKENS_MAPPING[new_token] = username
         print(token)
-        response_message = {'status': 'OK', 'token': new_token}
+        response_message = {'status': 'OK', 'token': new_token, 'nonce': nonce}
     else:
         response_message = {'status': 'Error', 'error_message': 'Invalid username or password'}
 
