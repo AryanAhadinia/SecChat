@@ -1,4 +1,6 @@
 import rsa
+from . import aes
+import base64
 
 
 def generate_keypair():
@@ -9,12 +11,20 @@ def write_keys(pu, pr, path, password=None):
     with open(path / "rsa.pub", "wb") as p:
         p.write(pu.save_pkcs1("PEM"))
     with open(path / "rsa.pem", "wb") as p:
-        p.write(pr.save_pkcs1("PEM"))
+        writable = pr.save_pkcs1("PEM")
+        if password:
+            aes_ = aes.AESCipher(password)
+            writable = aes_.encrypt(base64.b64encode(writable).decode())
+        p.write(writable)
 
 
 def load_private_key(path, password=None):
     with open(path / "rsa.pem", "rb") as p:
-        return rsa.PrivateKey.load_pkcs1(p.read())
+        read = p.read()
+        if password:
+            aes_ = aes.AESCipher(password)
+            read = base64.b64decode(aes_.decrypt(read).encode())
+        return rsa.PrivateKey.load_pkcs1(read)
 
 
 def load_public_key(path):
@@ -23,7 +33,7 @@ def load_public_key(path):
 
 
 def encrypt(message, pu):
-    blocks = [message[i : i + 117] for i in range(0, len(message), 117)]
+    blocks = [message[i: i + 117] for i in range(0, len(message), 117)]
     ciphertext = b""
     for block in blocks:
         ciphertext += rsa.encrypt(block.encode(), pu)
@@ -31,7 +41,7 @@ def encrypt(message, pu):
 
 
 def decrypt(ciphertext, pr):
-    blocks = [ciphertext[i : i + 128] for i in range(0, len(ciphertext), 128)]
+    blocks = [ciphertext[i: i + 128] for i in range(0, len(ciphertext), 128)]
     message = b""
     for block in blocks:
         message += rsa.decrypt(block, pr)

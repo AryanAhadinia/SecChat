@@ -101,8 +101,8 @@ def handle_register(server_public_key):
     password = input("Password: ")
     key_path = Path(f"client/keys/client/{username}")
     if os.path.exists(key_path):
-        PU = rsa_.load_public_key(key_path)
-        PR = rsa_.load_private_key(key_path, password)
+        print("username already exists")
+        return
     else:
         os.mkdir(key_path)
         PU, PR = rsa_.generate_keypair()
@@ -144,8 +144,12 @@ def handle_login(server_public_key):
 
     key_path = Path(f"client/keys/client/{username}")
     if os.path.exists(key_path):
-        PR = rsa_.load_private_key(key_path, password)
-        PU = rsa_.load_public_key(key_path)
+        try:
+            PR = rsa_.load_private_key(key_path, password)
+            PU = rsa_.load_public_key(key_path)
+        except UnicodeDecodeError:
+            print("invalid password")
+            return
 
     response = send_request("login", {'username': username, 'hashed_password': hashed_password,
                                       'nonce': nonce}, PR,
