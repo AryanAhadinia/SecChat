@@ -4,6 +4,9 @@ import os
 import random
 from pathlib import Path
 import socket
+
+from client.cryptographicio import symmetric_ratchet
+from client.proto import proto
 from cryptographicio import rsa_
 from cryptographicio import hash_lib
 from cryptographicio import nonce_lib
@@ -12,6 +15,8 @@ from database import salt_database
 from database import message_database
 from cryptographicio import nonce_lib
 from _thread import *
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptographicio.first_person_ratchet import FirstPerson
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -201,21 +206,57 @@ def handle_chats():
         print(result[3])
 
 
-def main():
-    global SERVER_PU, PU, PR
-    SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
+def handle_send():
+    global TOKEN, SESSION_KEY, PR, SERVER_PU
 
-    while True:
-        command = input()
-        if command == 'register':
-            handle_register(SERVER_PU)
-        elif command == 'login':
-            server_nonce = handle_login(SERVER_PU)
-            if server_nonce is not None:
-                handshake(PR, SERVER_PU, server_nonce)
-        elif command == 'chats':
-            handle_chats()
+    if SESSION_KEY is None or TOKEN is None:
+        print("please login first")
+        return
 
+    dst_user = input("Dest Username: ")
+    message = input(">>")
 
-if __name__ == "__main__":
-    main()
+    initial_key = X25519PrivateKey.generate()
+    encrypted_message = proto.proto_encrypt(
+        json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user, "diffie_key": initial_key.public_key()}),
+        TOKEN,
+        SESSION_KEY,
+        PR, SERVER_PU)
+    encrypted_response = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
+    response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    other_diffie_public_key = response_message['diffie_key']
+    shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
+
+    first_person_ratchet = FirstPerson(shared_key)
+    first_person_ratchet.dh_ratchet_send(other_diffie_public_key)
+    cipher = first_person_ratchet.send(message)
+    encrypted_message = proto.proto_encrypt(
+        json.dumps({"procedure": "message", "dst_user": dst_user, "cipher": cipher}), TOKEN, SESSION_KEY,
+        PR,
+        SERVER_PU)
+    encrypted_response = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
+    response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    if response_message['status'] == "OK":
+        print("message successfully sent")
+    else:
+        print(response_message["error_message"])
+
+    def main():
+        global SERVER_PU, PU, PR
+        SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
+
+        while True:
+            command = input()
+            if command == 'register':
+                handle_register(SERVER_PU)
+            elif command == 'login':
+                server_nonce = handle_login(SERVER_PU)
+                if server_nonce is not None:
+                    handshake(PR, SERVER_PU, server_nonce)
+            elif command == 'chats':
+                handle_chats()
+            elif command == 'send':
+                handle_send()
+
+    if __name__ == "__main__":
+        main()

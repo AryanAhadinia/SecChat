@@ -130,7 +130,7 @@ def reply_response(connection, self_private_key):
             public_key = key_ring_database.get_user_valid_key(username)
         except:
             connection.send("".encode('utf-8'))
-            connection.close()
+
             return
 
         if check_sign(decrypted_message['message'], sign, public_key):
