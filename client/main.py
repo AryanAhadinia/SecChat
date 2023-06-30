@@ -90,7 +90,7 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
     return response
 
 def handle_diffie_handshake(message):
-    src_user = message['src_user']
+    src_user = message['src_username']
     src_diffie_key = message['diffie_key'] 
     initial_key = X25519PrivateKey.generate()
     sending_public_key = initial_key.public_key()
