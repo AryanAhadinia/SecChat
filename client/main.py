@@ -66,7 +66,6 @@ def send_receive(message, host, port):
     server_socket.connect((host, port))
     server_socket.sendall(message.encode('utf-8'))
     data = server_socket.recv(1024)
-    print(data)
     response += data.decode()
     return response, server_socket
 
@@ -90,12 +89,39 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
     )
     return response
 
+def handle_diffie_handshake(message):
+    src_user = message['src_user']
+    src_diffie_key = message['diffie_key'] 
+    initial_key = X25519PrivateKey.generate()
+    sending_public_key = initial_key.public_key()
+    sending_public_key_string = base64.b64encode(sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+    encrypted_message = proto.proto_encrypt(
+        json.dumps({"procedure": "diffie_handshake", "dst_user": src_user, 
+                    "diffie_key": sending_public_key_string}),
+        TOKEN,
+        SESSION_KEY,
+        PR, SERVER_PU)
+    shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
 
-def listen_to_server(connection):
+    first_person_ratchet = FirstPerson(shared_key)
+    
+
+def listen_to_server(connection,self_private_key,server_public_key):
+    request_text = ""
     while True:
-        input_data = ''
         data = connection.recv(1024)
-        input_data += data.decode('utf-8')
+        if data is None:
+            break 
+        request_text += data.decode('utf-8')
+        if len(data) < 1024:
+            break
+
+    message,_ = proto.proto_decrypt(request_text,SESSION_KEY, self_private_key, server_public_key)
+    message = json.loads(message)
+    print(message)
+    if message['procedure'] == 'diffie handshake':
+        handle_diffie_handshake(message)
+    
 
 
 def handshake(self_private_key, server_public_key, server_nonce):
@@ -120,9 +146,7 @@ def handshake(self_private_key, server_public_key, server_nonce):
                 print("Socket successfully added to server")
             else:
                 print("adding socket failed")
-            print("saldkaskdl")
-            start_new_thread(listen_to_server, (chat_socket,))
-            print("ASDsdlksadsddddddddddddddddddddddddddddddddddddddddddddd")
+            start_new_thread(listen_to_server, (chat_socket,self_private_key,server_public_key,))
     else:
         print(response_message['error_message'])
 
@@ -138,7 +162,7 @@ def handle_register(server_public_key):
         os.mkdir(key_path)
         PU, PR = rsa_.generate_keypair()
         rsa_.write_keys(PU, PR, key_path, password)
-    print(PU)
+        
     self_public_key_string = base64.b64encode(PU.save_pkcs1("PEM")).decode()
     response = send_request("register",
                             {'username': username, 'password': password, 'public_key': self_public_key_string},
@@ -189,10 +213,10 @@ def handle_login(server_public_key):
     response = json.loads(response)
     if response['status'] == 'OK':
         if response['nonce'] == nonce:
-            print(response)
+            
             TOKEN = response['token']
             CURRENT_USERNAME = username
-            print(TOKEN)
+            
             print('Successfully logged in')
             return response['server_nonce']
         else:

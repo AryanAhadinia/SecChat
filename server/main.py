@@ -82,7 +82,6 @@ def handle_login(message, self_private_key, public_key):
     if user_database.login_user(username, hashed_password):
         new_token = token.generate_token()
         TOKENS_TO_USERNAME_MAPPING[new_token] = username
-        print(token)
         server_nonce = nonce_lib.generate_nonce()
         USERNAME_TO_SERVER_NONCE_MAPPING[username] = server_nonce
         response_message = {'status': 'OK', 'token': new_token, 'nonce': nonce, 'server_nonce': server_nonce}
@@ -104,7 +103,6 @@ def reply_response(connection, self_private_key):
 
     if message["procedure"] == "register":
         public_key = rsa.PublicKey.load_pkcs1(base64.b64decode(message['payload']["public_key"]))
-        print(public_key)
         if check_sign(decrypted_message['message'], sign, public_key):
             response = handle_register(message['payload'], self_private_key, public_key)
             connection.sendall(response.encode('utf-8'))
@@ -145,7 +143,6 @@ def reply_response(connection, self_private_key):
 
 def handle_handshake(message, self_private_key, server_nonce, public_key, conn):
     global TOKEN_TO_CONNECTION_MAPPING
-    print("message injast" , message)
     nonce = message["nonce"]
 
     if message['server_nonce'] != server_nonce:
@@ -157,50 +154,71 @@ def handle_handshake(message, self_private_key, server_nonce, public_key, conn):
         response_message = {"status": "OK", "nonce": nonce, "key": base64.b64encode(session_key).decode()}
         
     encrypted_message = encrypt_message(json.dumps(response_message), self_private_key, public_key)
-    print(nonce)
+    
     return encrypted_message
 
-def handle_add_socket(connection, session_key,self_private_key,other_public_key):
+def handle_add_socket(connection, session_key,self_private_key,other_public_key,token):
     TOKEN_TO_CONNECTION_MAPPING[token] = connection
     encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}),"Server"
                                                     ,session_key, self_private_key, other_public_key )
     return encrypted_message
 
 def get_sessionkey_from_username(username):
-    for key, val in TOKEN_TO_AES_MAPPING.items():
+    for key, val in TOKENS_TO_USERNAME_MAPPING.items():
         if val == username:
             return TOKEN_TO_AES_MAPPING[key]
         
-def handle_diffie_handshake(message,token):
-    dst_username = message['dst_username']
+def get_token_from_username(username):
+    for key, val in TOKENS_TO_USERNAME_MAPPING.items():
+        if val == username:
+            return key
+        
+def handle_diffie_handshake(message,self_private_key,token):
+    dst_username = message['dst_user']
+    print(TOKENS_TO_USERNAME_MAPPING,TOKEN_TO_CONNECTION_MAPPING, dst_username)
     session_key = get_sessionkey_from_username(dst_username)
-    
-    connection = TOKEN_TO_CONNECTION_MAPPING[token]
+    dst_token = get_token_from_username(dst_username)
+    connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
+    username = TOKENS_TO_USERNAME_MAPPING[token]
     src_diffie_helman = message['diffie_key']
+    other_public_key = key_ring_database.get_user_valid_key(dst_username)
     encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "diffie handshake", 
-                                                        "src_diffie_helman" :src_diffie_helman}),"Server"
+                                                        "diffie_key" :src_diffie_helman,"src_username":username}),"Server"
                                                     ,session_key, self_private_key, other_public_key )
-    return encrypted_message
+    connection.sendall(encrypted_message.encode('utf-8'))
+    request_text = ""
+    while True:
+        data = connection.recv(1024)
+        if data is None:
+            break 
+        request_text += data.decode('utf-8')
+        if len(data) < 1024:
+            break
+    
+    
     
 
 def reply_chat(connection,PR):
     request_text = ""
-    data = connection.recv(1024)
-    request_text += data.decode('utf-8')
+    while True:
+        data = connection.recv(1024)
+        if data is None:
+            break 
+        request_text += data.decode('utf-8')
+        if len(data) < 1024:
+            break
     token = proto.proto_get_token(request_text, PR)
-    print("lsadkfalskd", token)
     username = TOKENS_TO_USERNAME_MAPPING[token]
-    print(TOKENS_TO_USERNAME_MAPPING, TOKEN_TO_AES_MAPPING)
     public_key = key_ring_database.get_user_valid_key(username)
     session_key = TOKEN_TO_AES_MAPPING[token]
     
     message = proto.proto_decrypt(request_text,session_key, PR, public_key)
     message = json.loads(message)
     if message['procedure'] == 'diffie_handshake':
-        handle_diffie_handshake(message)
+        response = handle_diffie_handshake(message,PR)
 
     if message['procedure'] == 'add_socket':
-        response = handle_add_socket(connection,session_key, PR, public_key)
+        response = handle_add_socket(connection,session_key, PR, public_key,token)
         connection.sendall(response.encode('utf-8'))
         
         
