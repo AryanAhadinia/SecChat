@@ -18,6 +18,7 @@ from database import user_database
 from database import initialize_database
 from cryptographicio import hash_lib
 from cryptographicio import token
+from cryptographicio import nonce_lib
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -25,7 +26,7 @@ DOWNSTREAM_PORT = 8085
 
 PU, PR = None, None
 TOKENS_MAPPING = dict()
-
+USERNAME_SERVER_NONCE_MAPPING = dict()
 
 def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
@@ -79,7 +80,9 @@ def handle_login(message, self_private_key, public_key):
         new_token = token.generate_token()
         TOKENS_MAPPING[new_token] = username
         print(token)
-        response_message = {'status': 'OK', 'token': new_token, 'nonce': nonce}
+        server_nonce = nonce_lib.generate_nonce()
+        USERNAME_SERVER_NONCE_MAPPING[username] = server_nonce
+        response_message = {'status': 'OK', 'token': new_token, 'nonce': nonce,'server_nonce': server_nonce}
     else:
         response_message = {'status': 'Error', 'error_message': 'Invalid username or password'}
 
@@ -116,15 +119,31 @@ def reply_response(connection, self_private_key):
             connection.send("Signature validation failed".encode('utf-8'))
 
     if message["procedure"] == "handshake":
-        response = handle_handshake(decrypted_message["message"], self_private_key)
-        connection.sendall(response)
+        token = message["payload"]["token"]
+        try:
+            username = TOKENS_MAPPING[token]
+            server_nonce = USERNAME_SERVER_NONCE_MAPPING[username]
+            public_key = key_ring_database.get_user_valid_key(username)
+        except:
+            connection.send("".encode('utf-8'))
+            return
+        
+        if check_sign(decrypted_message['message'], sign, public_key):
+            response = handle_handshake(message['payload'], self_private_key,server_nonce,public_key)
+            connection.sendall(response.encode('utf-8'))
+        else:
+            connection.send("Signature validation failed".encode('utf-8'))
 
 
-def handle_handshake(message, self_private_key):
-    nonce = message["Nonce"]
-    public_key = rsa.PrivateKey.load_pkcs1(base64.b64decode(message["key"]))
-    session_key = aes.generate_key()
-    response_message = {"Nonce": nonce, "key": session_key}
+def handle_handshake(message, self_private_key,server_nonce,public_key):
+    nonce = message["nonce"]
+    
+    if message['server_nonce'] != server_nonce:
+        del TOKENS_MAPPING[token]
+        response_message = {"status": "Error", "error_message":"Handshake not related to previously logged in user"}
+    else:
+        session_key = aes.generate_key()
+        response_message = {"status": "OK", "nonce": nonce, "key": session_key}
     encrypted_message = encrypt_message(response_message, self_private_key, public_key)
     print(nonce)
     return encrypted_message

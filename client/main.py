@@ -9,6 +9,8 @@ from cryptographicio import hash_lib
 from cryptographicio import nonce_lib
 from database import initialize_database
 from database import salt_database
+from cryptographicio import nonce_lib
+
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -77,16 +79,25 @@ def send_request(procedure, payload, self_private_key, destination_public_key):
     return response
 
 
-def handshake(self_public_key, self_private_key, server_public_key):
-    nonce = random.randint(1_000_000_000, 9_999_999_999)
+def handshake(self_public_key, self_private_key, server_public_key,server_nonce):
+    global SESSION_KEY
+    nonce = nonce_lib.generate_nonce()
     self_public_key_string = base64.b64encode(self_public_key.save_pkcs1("PEM")).decode()
+    #response_message = \
+    #    send_request("handshake", {"nonce": nonce, "public_key": self_public_key_string}, self_private_key, server_public_key)[
+    #        "message"]
     response_message = \
-        send_request("handshake", {"Nonce": nonce, "PU": self_public_key_string}, self_private_key, server_public_key)[
-            "message"]
-    nonce_from_server = response_message["Nonce"]
-    if nonce != nonce_from_server:
-        raise Exception("This message is not Fresh!")
-    return response_message["key"]
+        send_request("handshake", {"nonce": nonce, "token": TOKEN,"server_nonce": server_nonce}, self_private_key, server_public_key)[
+           "message"]
+    if response_message["status"] == 'OK':
+        nonce_from_server = response_message["nonce"]
+        if nonce != nonce_from_server:
+            print("This message is not fresh")
+        else:
+            SESSION_KEY = response_message["key"]
+    else:
+        print(response_message['error_message'])
+    
 
 
 def handle_register(server_public_key):
@@ -124,7 +135,7 @@ def handle_register(server_public_key):
 
 
 def handle_login(server_public_key):
-    global PR, TOKEN, SESSION_KEY
+    global PR, TOKEN, SESSION_KEY, PU
     username = input("Username: ")
     password = input("Password: ")
     if not os.path.exists(os.path.join(Path(f"client/database/databases/{username}"), f'{username}.db')):
@@ -138,6 +149,7 @@ def handle_login(server_public_key):
     key_path = Path(f"client/keys/client/{username}")
     if os.path.exists(key_path):
         PR = rsa_.load_private_key(key_path, password)
+        PU = rsa_.load_public_key(key_path)
 
     response = send_request("login", {'username': username, 'hashed_password': hashed_password,
                                       'nonce': nonce}, PR,
@@ -146,9 +158,11 @@ def handle_login(server_public_key):
     response = json.loads(response)
     if response['status'] == 'OK':
         if response['nonce'] == nonce:
+            print(response)
             TOKEN = response['token']
-            print(token)
+            print(TOKEN)
             print('Successfully logged in')
+            return response['server_nonce']
         else:
             print("An old message was received in response of login request")
 
@@ -165,7 +179,9 @@ def main():
         if command == 'register':
             handle_register(SERVER_PU)
         elif command == 'login':
-            handle_login(SERVER_PU)
+            server_nonce = handle_login(SERVER_PU)
+            if server_nonce is not None:
+                handshake(PU, PR , SERVER_PU, server_nonce)
 
 
 if __name__ == "__main__":
