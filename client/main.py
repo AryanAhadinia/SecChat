@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptographicio.first_person_ratchet import FirstPerson
 from cryptographicio.second_person_ratchet import SecondPerson
-
+from cryptographicio.hkdf_ import hkdf
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -104,7 +104,7 @@ def handle_diffie_handshake(message):
     
     # convert to X25519 public key
     other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(src_diffie_key))
-    shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
+    shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
 
     second_person_ratchet = SecondPerson(shared_key)
     USERNAME_TO_RATCHET_MAPPING[src_user] = {'type':'second', 'person_ratchet':second_person_ratchet}

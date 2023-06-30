@@ -196,7 +196,7 @@ def handle_diffie_handshake(message,self_private_key,token):
         if len(data) < 1024:
             break
     
-    print('salam', request_text)
+    
     
 
 def handle_create_group(message, username, session_key, self_private_key, other_public_key):
