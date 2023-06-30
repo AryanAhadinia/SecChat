@@ -142,9 +142,9 @@ def handle_handshake(message, self_private_key,server_nonce,public_key):
         del TOKENS_MAPPING[token]
         response_message = {"status": "Error", "error_message":"Handshake not related to previously logged in user"}
     else:
-        session_key = aes.generate_key()
-        response_message = {"status": "OK", "nonce": nonce, "key": session_key}
-    encrypted_message = encrypt_message(response_message, self_private_key, public_key)
+        session_key = aes.AESCipher._keygen()
+        response_message = {"status": "OK", "nonce": nonce, "key": base64.b64encode(session_key).decode()}
+    encrypted_message = encrypt_message(json.dumps(response_message), self_private_key, public_key)
     print(nonce)
     return encrypted_message
 
