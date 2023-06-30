@@ -16,7 +16,11 @@ from database import message_database
 from cryptographicio import nonce_lib
 from _thread import *
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding
+from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptographicio.first_person_ratchet import FirstPerson
+
+
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
@@ -227,9 +231,11 @@ def handle_send():
     message = input(">>")
 
     initial_key = X25519PrivateKey.generate()
+    sending_public_key = initial_key.public_key()
+    sending_public_key_string = base64.b64encode(sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
     encrypted_message = proto.proto_encrypt(
         json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user, 
-                    "diffie_key": base64.b64encode(initial_key.public_key()).decode()}),
+                    "diffie_key": sending_public_key_string}),
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
