@@ -83,18 +83,15 @@ def handshake(self_public_key, self_private_key, server_public_key,server_nonce)
     global SESSION_KEY
     nonce = nonce_lib.generate_nonce()
     self_public_key_string = base64.b64encode(self_public_key.save_pkcs1("PEM")).decode()
-    #response_message = \
-    #    send_request("handshake", {"nonce": nonce, "public_key": self_public_key_string}, self_private_key, server_public_key)[
-    #        "message"]
     response_message = \
-        send_request("handshake", {"nonce": nonce, "token": TOKEN,"server_nonce": server_nonce}, self_private_key, server_public_key)[
-           "message"]
+        send_request("handshake", {"nonce": nonce, "token": TOKEN,"server_nonce": server_nonce}, self_private_key, server_public_key)
+    response_message = json.loads(response_message)
     if response_message["status"] == 'OK':
         nonce_from_server = response_message["nonce"]
         if nonce != nonce_from_server:
             print("This message is not fresh")
         else:
-            SESSION_KEY = response_message["key"]
+            SESSION_KEY = base64.b64decode(response_message["key"])
     else:
         print(response_message['error_message'])
     
