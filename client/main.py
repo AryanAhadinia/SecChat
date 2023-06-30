@@ -9,6 +9,7 @@ from cryptographicio import hash_lib
 from cryptographicio import nonce_lib
 from database import initialize_database
 from database import salt_database
+from database import message_database
 from cryptographicio import nonce_lib
 from _thread import *
 
@@ -18,6 +19,7 @@ DOWNSTREAM_PORT = 8085
 TOKEN = None
 SESSION_KEY = None
 SERVER_CONNECTION = None
+CURRENT_USERNAME = None
 
 
 def encrypt_message(message, self_private_key, destination_public_key):
@@ -141,7 +143,7 @@ def handle_register(server_public_key):
 
 
 def handle_login(server_public_key):
-    global PR, TOKEN, SESSION_KEY, PU
+    global PR, TOKEN, SESSION_KEY, PU, CURRENT_USERNAME
     username = input("Username: ")
     password = input("Password: ")
     if not os.path.exists(os.path.join(Path(f"client/database/databases/{username}"), f'{username}.db')):
@@ -170,6 +172,7 @@ def handle_login(server_public_key):
         if response['nonce'] == nonce:
             print(response)
             TOKEN = response['token']
+            CURRENT_USERNAME = username
             print(TOKEN)
             print('Successfully logged in')
             return response['server_nonce']
@@ -181,7 +184,21 @@ def handle_login(server_public_key):
 
 
 def handle_chats():
-    pass
+    if CURRENT_USERNAME is None:
+        print("login first to view your messages")
+        return
+
+    database_path = Path(f"client/database/databases/{CURRENT_USERNAME}")
+    database_name = f"{CURRENT_USERNAME}.db"
+
+    if not os.path.exists(os.path.join(database_path, database_name)):
+        print("you have no messages in this device")
+
+    results = message_database.get_messages(database_path, database_name, CURRENT_USERNAME)
+
+    for result in results:
+        print(f"from {result[1]} to {result[2]}:")
+        print(result[3])
 
 
 def main():

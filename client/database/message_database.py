@@ -12,3 +12,11 @@ def create_database(path, name):
             """
 
     database_.execute_sql(sql, (), path, name)
+
+
+def get_messages(path, name, username):
+    sql = """SELECT * from MESSAGE WHERE
+                src_user = * or dst_user = * """
+
+    result = database_.execute_sql(sql, (username, username), path, name)
+    return result
