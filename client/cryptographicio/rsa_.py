@@ -1,5 +1,6 @@
 import rsa
 from . import aes
+import base64
 
 
 def generate_keypair():
@@ -13,7 +14,7 @@ def write_keys(pu, pr, path, password=None):
         writable = pr.save_pkcs1("PEM")
         if password:
             aes = aes.AESCipher(password)
-            writable = aes.encrypt(writable)
+            writable = aes.encrypt(base64.b64encode(writable))
         p.write(writable)
 
 
@@ -22,7 +23,7 @@ def load_private_key(path, password=None):
         read = p.read()
         if password:
             aes = aes.AESCipher(password)
-            read = aes.decrypt(read)
+            read = base64.b64decode(aes.decrypt(read))
         return rsa.PrivateKey.load_pkcs1(read)
 
 
