@@ -14,3 +14,4 @@ def create_database():
             """
 
     database.execute_sql(sql, ())
+

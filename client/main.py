@@ -10,12 +10,14 @@ from cryptographicio import nonce_lib
 from database import initialize_database
 from database import salt_database
 from cryptographicio import nonce_lib
+from _thread import *
 
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
 TOKEN = None
 SESSION_KEY = None
+SERVER_CONNECTION = None
 
 
 def encrypt_message(message, self_private_key, destination_public_key):
@@ -47,6 +49,7 @@ def decrypt_message(encrypted_message, self_private_key, destination_public_key)
 
 
 def send_receive(message, host, port):
+    global SERVER_CONNECTION
     response = ""
     server_socket = socket.socket()
     server_socket.connect((host, port))
@@ -54,11 +57,11 @@ def send_receive(message, host, port):
     data = server_socket.recv(1024)
     print(data)
     response += data.decode()
-    server_socket.close()
+    SERVER_CONNECTION = server_socket
     return response
 
 
-def send_request(procedure, payload, self_private_key, destination_public_key):
+def send_request(procedure, payload, self_private_key, destination_public_key, close_connection):
     http_like_message = {
         "procedure": procedure,
         "payload": payload,
@@ -78,13 +81,19 @@ def send_request(procedure, payload, self_private_key, destination_public_key):
     return response
 
 
-def handshake(self_public_key, self_private_key, server_public_key, server_nonce):
-    global SESSION_KEY
+def listen_to_server(connection):
+    while True:
+        input_data = ''
+        data = connection.recv(1024)
+        input_data += data.decode('utf-8')
+
+
+def handshake(self_private_key, server_public_key, server_nonce):
+    global SESSION_KEY, SERVER_CONNECTION
     nonce = nonce_lib.generate_nonce()
-    self_public_key_string = base64.b64encode(self_public_key.save_pkcs1("PEM")).decode()
     response_message = \
         send_request("handshake", {"nonce": nonce, "token": TOKEN, "server_nonce": server_nonce}, self_private_key,
-                     server_public_key)
+                     server_public_key, False)
     response_message = json.loads(response_message)
     if response_message["status"] == 'OK':
         nonce_from_server = response_message["nonce"]
@@ -92,6 +101,7 @@ def handshake(self_public_key, self_private_key, server_public_key, server_nonce
             print("This message is not fresh")
         else:
             SESSION_KEY = base64.b64decode(response_message["key"])
+            start_new_thread(listen_to_server, (SERVER_CONNECTION,))
     else:
         print(response_message['error_message'])
 
@@ -112,7 +122,7 @@ def handle_register(server_public_key):
     response = send_request("register",
                             {'username': username, 'password': password, 'public_key': self_public_key_string},
                             PR,
-                            server_public_key)
+                            server_public_key, True)
     response = json.loads(response)
     if response['status'] == 'OK':
         salt = response['success_message']
@@ -153,7 +163,7 @@ def handle_login(server_public_key):
 
     response = send_request("login", {'username': username, 'hashed_password': hashed_password,
                                       'nonce': nonce}, PR,
-                            server_public_key)
+                            server_public_key, True)
 
     response = json.loads(response)
     if response['status'] == 'OK':
@@ -170,6 +180,10 @@ def handle_login(server_public_key):
         print(response['error_message'])
 
 
+def handle_chats():
+    pass
+
+
 def main():
     global SERVER_PU, PU, PR
     SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
@@ -181,7 +195,9 @@ def main():
         elif command == 'login':
             server_nonce = handle_login(SERVER_PU)
             if server_nonce is not None:
-                handshake(PU, PR, SERVER_PU, server_nonce)
+                handshake(PR, SERVER_PU, server_nonce)
+        elif command == 'chats':
+            handle_chats()
 
 
 if __name__ == "__main__":

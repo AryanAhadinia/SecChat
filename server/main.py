@@ -25,8 +25,10 @@ UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
 
 PU, PR = None, None
-TOKENS_MAPPING = dict()
-USERNAME_SERVER_NONCE_MAPPING = dict()
+TOKENS_TO_USERNAME_MAPPING = dict()
+USERNAME_TO_SERVER_NONCE_MAPPING = dict()
+TOKEN_TO_CONNECTION_MAPPING = dict()
+
 
 def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
@@ -78,11 +80,11 @@ def handle_login(message, self_private_key, public_key):
 
     if user_database.login_user(username, hashed_password):
         new_token = token.generate_token()
-        TOKENS_MAPPING[new_token] = username
+        TOKENS_TO_USERNAME_MAPPING[new_token] = username
         print(token)
         server_nonce = nonce_lib.generate_nonce()
-        USERNAME_SERVER_NONCE_MAPPING[username] = server_nonce
-        response_message = {'status': 'OK', 'token': new_token, 'nonce': nonce,'server_nonce': server_nonce}
+        USERNAME_TO_SERVER_NONCE_MAPPING[username] = server_nonce
+        response_message = {'status': 'OK', 'token': new_token, 'nonce': nonce, 'server_nonce': server_nonce}
     else:
         response_message = {'status': 'Error', 'error_message': 'Invalid username or password'}
 
@@ -107,6 +109,7 @@ def reply_response(connection, self_private_key):
             connection.sendall(response.encode('utf-8'))
         else:
             connection.send("Signature validation failed".encode('utf-8'))
+        connection.close()
 
     if message["procedure"] == "login":
         username = message['payload']['username']
@@ -117,33 +120,40 @@ def reply_response(connection, self_private_key):
             connection.sendall(response.encode('utf-8'))
         else:
             connection.send("Signature validation failed".encode('utf-8'))
+        connection.close()
 
     if message["procedure"] == "handshake":
         token = message["payload"]["token"]
         try:
-            username = TOKENS_MAPPING[token]
-            server_nonce = USERNAME_SERVER_NONCE_MAPPING[username]
+            username = TOKENS_TO_USERNAME_MAPPING[token]
+            server_nonce = USERNAME_TO_SERVER_NONCE_MAPPING[username]
             public_key = key_ring_database.get_user_valid_key(username)
         except:
             connection.send("".encode('utf-8'))
+            connection.close()
             return
-        
+
         if check_sign(decrypted_message['message'], sign, public_key):
-            response = handle_handshake(message['payload'], self_private_key,server_nonce,public_key)
+            response = handle_handshake(message['payload'], self_private_key, server_nonce, public_key, connection)
             connection.sendall(response.encode('utf-8'))
+
         else:
             connection.send("Signature validation failed".encode('utf-8'))
+            connection.close()
 
 
-def handle_handshake(message, self_private_key,server_nonce,public_key):
+def handle_handshake(message, self_private_key, server_nonce, public_key, conn):
+    global TOKEN_TO_CONNECTION_MAPPING
+
     nonce = message["nonce"]
-    
+
     if message['server_nonce'] != server_nonce:
-        del TOKENS_MAPPING[token]
-        response_message = {"status": "Error", "error_message":"Handshake not related to previously logged in user"}
+        del TOKENS_TO_USERNAME_MAPPING[token]
+        response_message = {"status": "Error", "error_message": "Handshake not related to previously logged in user"}
     else:
         session_key = aes.AESCipher._keygen()
         response_message = {"status": "OK", "nonce": nonce, "key": base64.b64encode(session_key).decode()}
+        TOKEN_TO_CONNECTION_MAPPING[token] = conn
     encrypted_message = encrypt_message(json.dumps(response_message), self_private_key, public_key)
     print(nonce)
     return encrypted_message
