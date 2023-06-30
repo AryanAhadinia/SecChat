@@ -31,6 +31,7 @@ SERVER_CONNECTION = None
 CURRENT_USERNAME = None
 USERNAME_TO_RATCHET_MAPPING = dict()
 
+
 def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
         "message": message,
@@ -81,7 +82,7 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
         self_private_key,
         destination_public_key,
     )
-    encrypted_response,_ = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
     response = decrypt_message(
         encrypted_response,
         self_private_key,
@@ -89,46 +90,52 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
     )
     return response
 
+
 def handle_diffie_handshake(message):
     src_user = message['src_username']
-    src_diffie_key = message['diffie_key'] 
+    src_diffie_key = message['diffie_key']
     initial_key = X25519PrivateKey.generate()
     sending_public_key = initial_key.public_key()
-    sending_public_key_string = base64.b64encode(sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+    sending_public_key_string = base64.b64encode(
+        sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
     encrypted_message = proto.proto_encrypt(
-        json.dumps({"procedure": "diffie_handshake", 
+        json.dumps({"procedure": "diffie_handshake",
                     "diffie_key": sending_public_key_string}),
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
-    
+
     # convert to X25519 public key
     other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(src_diffie_key))
     shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
 
     second_person_ratchet = SecondPerson(shared_key)
-    USERNAME_TO_RATCHET_MAPPING[src_user] = {'type':'second', 'person_ratchet':second_person_ratchet}
+    USERNAME_TO_RATCHET_MAPPING[src_user] = {'type': 'second', 'person_ratchet': second_person_ratchet}
     return encrypted_message
-    
 
-def listen_to_server(connection,self_private_key,server_public_key):
+
+def listen_to_server(connection, self_private_key, server_public_key):
     while True:
         request_text = ""
         while True:
             data = connection.recv(1024)
             if data is None:
-                break 
+                break
             request_text += data.decode('utf-8')
             if len(data) < 1024:
                 break
 
-        message,_ = proto.proto_decrypt(request_text,SESSION_KEY, self_private_key, server_public_key)
+        message, _ = proto.proto_decrypt(request_text, SESSION_KEY, self_private_key, server_public_key)
         message = json.loads(message)
         print(message)
         if message['procedure'] == 'diffie handshake':
             response = handle_diffie_handshake(message)
             connection.sendall(response.encode('utf-8'))
-    
+        if message['procedure'] == 'message':
+            # get message
+            database_path = Path(f"client/database/databases/{CURRENT_USERNAME}")
+            database_name = f'{CURRENT_USERNAME}.db'
+            message_database.add_message(database_path, database_name, )
 
 
 def handshake(self_private_key, server_public_key, server_nonce):
@@ -144,16 +151,17 @@ def handshake(self_private_key, server_public_key, server_nonce):
             print("This message is not fresh")
         else:
             SESSION_KEY = base64.b64decode(response_message["key"])
-            encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "add_socket","token": TOKEN}),TOKEN
-                                                    ,SESSION_KEY,self_private_key, server_public_key )
-            encrypted_response,chat_socket = send_receive(encrypted_message,HOST,DOWNSTREAM_PORT)
-            decrypted_message,_ = proto.proto_decrypt(encrypted_response,SESSION_KEY,self_private_key,server_public_key)
+            encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "add_socket", "token": TOKEN}), TOKEN
+                                                    , SESSION_KEY, self_private_key, server_public_key)
+            encrypted_response, chat_socket = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+            decrypted_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, self_private_key,
+                                                       server_public_key)
             decrypted_message = json.loads(decrypted_message)
             if decrypted_message['status'] == 'OK':
                 print("Socket successfully added to server")
             else:
                 print("adding socket failed")
-            start_new_thread(listen_to_server, (chat_socket,self_private_key,server_public_key,))
+            start_new_thread(listen_to_server, (chat_socket, self_private_key, server_public_key,))
     else:
         print(response_message['error_message'])
 
@@ -169,7 +177,7 @@ def handle_register(server_public_key):
         os.mkdir(key_path)
         PU, PR = rsa_.generate_keypair()
         rsa_.write_keys(PU, PR, key_path, password)
-        
+
     self_public_key_string = base64.b64encode(PU.save_pkcs1("PEM")).decode()
     response = send_request("register",
                             {'username': username, 'password': password, 'public_key': self_public_key_string},
@@ -220,10 +228,10 @@ def handle_login(server_public_key):
     response = json.loads(response)
     if response['status'] == 'OK':
         if response['nonce'] == nonce:
-            
+
             TOKEN = response['token']
             CURRENT_USERNAME = username
-            
+
             print('Successfully logged in')
             return response['server_nonce']
         else:
@@ -263,19 +271,20 @@ def handle_send():
 
     initial_key = X25519PrivateKey.generate()
     sending_public_key = initial_key.public_key()
-    sending_public_key_string = base64.b64encode(sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+    sending_public_key_string = base64.b64encode(
+        sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
     encrypted_message = proto.proto_encrypt(
-        json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user, 
+        json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user,
                     "diffie_key": sending_public_key_string}),
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
-    encrypted_response,_ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
     response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
     other_diffie_public_key = response_message['diffie_key']
     # convert to X25519 public key
     other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))
-    shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
+    shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
 
     first_person_ratchet = FirstPerson(shared_key)
     first_person_ratchet.dh_ratchet_send(other_diffie_public_key)
@@ -284,12 +293,13 @@ def handle_send():
         json.dumps({"procedure": "message", "dst_user": dst_user, "cipher": cipher}), TOKEN, SESSION_KEY,
         PR,
         SERVER_PU)
-    encrypted_response,_ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
     response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
     if response_message['status'] == "OK":
         print("message successfully sent")
     else:
         print(response_message["error_message"])
+
 
 def main():
     global SERVER_PU, PU, PR
@@ -307,6 +317,7 @@ def main():
             handle_chats()
         elif command == 'send':
             handle_send()
+
 
 if __name__ == "__main__":
     main()

@@ -153,67 +153,82 @@ def handle_handshake(message, self_private_key, server_nonce, public_key, conn):
         session_key = aes.AESCipher._keygen()
         TOKEN_TO_AES_MAPPING[message['token']] = session_key
         response_message = {"status": "OK", "nonce": nonce, "key": base64.b64encode(session_key).decode()}
-        
+
     encrypted_message = encrypt_message(json.dumps(response_message), self_private_key, public_key)
-    
+
     return encrypted_message
 
-def handle_add_socket(connection, session_key,self_private_key,other_public_key,token):
+
+def handle_add_socket(connection, session_key, self_private_key, other_public_key, token):
     TOKEN_TO_CONNECTION_MAPPING[token] = connection
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}),"Server"
-                                                    ,session_key, self_private_key, other_public_key )
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server"
+                                            , session_key, self_private_key, other_public_key)
     return encrypted_message
+
 
 def get_sessionkey_from_username(username):
     for key, val in TOKENS_TO_USERNAME_MAPPING.items():
         if val == username:
             return TOKEN_TO_AES_MAPPING[key]
-        
+
+
 def get_token_from_username(username):
     for key, val in TOKENS_TO_USERNAME_MAPPING.items():
         if val == username:
             return key
-        
-def handle_diffie_handshake(message,self_private_key,token):
+
+
+def handle_diffie_handshake(message, self_private_key, token):
     dst_username = message['dst_user']
-    print(TOKENS_TO_USERNAME_MAPPING,TOKEN_TO_CONNECTION_MAPPING, dst_username)
+    print(TOKENS_TO_USERNAME_MAPPING, TOKEN_TO_CONNECTION_MAPPING, dst_username)
     session_key = get_sessionkey_from_username(dst_username)
     dst_token = get_token_from_username(dst_username)
     connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
     username = TOKENS_TO_USERNAME_MAPPING[token]
     src_diffie_helman = message['diffie_key']
     other_public_key = key_ring_database.get_user_valid_key(dst_username)
-    encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "diffie handshake", 
-                                                        "diffie_key" :src_diffie_helman,"src_username":username}),"Server"
-                                                    ,session_key, self_private_key, other_public_key )
+    encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "diffie handshake",
+                                                        "diffie_key": src_diffie_helman, "src_username": username}),
+                                            "Server"
+                                            , session_key, self_private_key, other_public_key)
     connection.sendall(encrypted_message.encode('utf-8'))
-    request_text = ""
+    diffie_response = ""
     while True:
         data = connection.recv(1024)
         if data is None:
-            break 
-        request_text += data.decode('utf-8')
+            break
+        diffie_response += data.decode('utf-8')
         if len(data) < 1024:
             break
-    
-    
-    
+
+    source_session_key = TOKEN_TO_AES_MAPPING[token]
+    source_public_key = key_ring_database.get_user_valid_key(username)
+
+    decrypted_message = proto.proto_decrypt(diffie_response, source_session_key, self_private_key, source_public_key)
+    loaded_message = json.loads(decrypted_message)
+    diffie_key = loaded_message['diffie_key']
+    encrypted_response_to_source = proto.proto_encrypt(json.dumps({"diffie_key": diffie_key}), "Server",
+                                                       source_session_key, self_private_key,
+                                                       source_public_key)
+    return encrypted_response_to_source
+
 
 def handle_create_group(message, username, session_key, self_private_key, other_public_key):
     group_name = message['group_name']
     group_admin = username
     group_database.add_group(group_name, group_admin)
     # add admin to group users
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}),"Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
     return encrypted_message
-    
 
-def reply_chat(connection,PR):
+
+def reply_chat(connection, PR):
     request_text = ""
     while True:
         data = connection.recv(1024)
         if data is None:
-            break 
+            break
         request_text += data.decode('utf-8')
         if len(data) < 1024:
             break
@@ -221,24 +236,23 @@ def reply_chat(connection,PR):
     username = TOKENS_TO_USERNAME_MAPPING[token]
     public_key = key_ring_database.get_user_valid_key(username)
     session_key = TOKEN_TO_AES_MAPPING[token]
-    
-    message = proto.proto_decrypt(request_text,session_key, PR, public_key)
+
+    message = proto.proto_decrypt(request_text, session_key, PR, public_key)
     message = json.loads(message)
     if message['procedure'] == 'diffie_handshake':
-        response = handle_diffie_handshake(message,PR,token)
+        response = handle_diffie_handshake(message, PR, token)
+        connection.sendall(response.encode('utf-8'))
 
     if message['procedure'] == 'add_socket':
-        response = handle_add_socket(connection,session_key, PR, public_key,token)
+        response = handle_add_socket(connection, session_key, PR, public_key, token)
         connection.sendall(response.encode('utf-8'))
-    
+
     if message['procedure'] == 'create_group':
         response = handle_create_group(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
-        
-        
 
 
-def new_protocol(PU,PR):
+def new_protocol(PU, PR):
     try:
         connection_socket = socket.socket()
         connection_socket.bind((HOST, DOWNSTREAM_PORT))
@@ -251,6 +265,7 @@ def new_protocol(PU,PR):
     except socket.error as e:
         print(str(e))
 
+
 def main():
     initialize_database.create_tables()
     connection_socket = socket.socket()
@@ -259,7 +274,7 @@ def main():
     try:
         connection_socket.bind((HOST, UPSTREAM_PORT))
         print("Socket is listening ...")
-        start_new_thread(new_protocol,(PU,PR,))
+        start_new_thread(new_protocol, (PU, PR,))
         connection_socket.listen(5)
         while True:
             connection, address = connection_socket.accept()
@@ -267,8 +282,6 @@ def main():
             start_new_thread(reply_response, (connection, PR,))
     except socket.error as e:
         print(str(e))
-    
-    
 
 
 if __name__ == "__main__":

@@ -20,3 +20,11 @@ def get_messages(path, name, username):
 
     result = database_.execute_sql(sql, (username, username), path, name)
     return result
+
+
+def add_message(path, name, src_user, dst_user, encrypted_context):
+    sql = """INSERT INTO MESSAGE (src_user, dst_user, encrypted_content) 
+                            VALUES (?, ?, ?)"""
+    args = (src_user, dst_user, encrypted_context)
+
+    database_.execute_sql(sql, args, path, name)
