@@ -166,10 +166,22 @@ def handle_add_socket(connection, session_key,self_private_key,other_public_key)
                                                     ,session_key, self_private_key, other_public_key )
     return encrypted_message
 
+def get_sessionkey_from_username(username):
+    for key, val in TOKEN_TO_AES_MAPPING.items():
+        if val == username:
+            return TOKEN_TO_AES_MAPPING[key]
+        
 def handle_diffie_handshake(message,token):
     dst_username = message['dst_username']
+    session_key = get_sessionkey_from_username(dst_username)
+    
     connection = TOKEN_TO_CONNECTION_MAPPING[token]
-    print(message)
+    src_diffie_helman = message['diffie_key']
+    encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "diffie handshake", 
+                                                        "src_diffie_helman" :src_diffie_helman}),"Server"
+                                                    ,session_key, self_private_key, other_public_key )
+    return encrypted_message
+    
 
 def reply_chat(connection,PR):
     request_text = ""
