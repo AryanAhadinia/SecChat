@@ -195,6 +195,8 @@ def handle_diffie_handshake(message,self_private_key,token):
         if len(data) < 1024:
             break
     
+    print('salam', request_text)
+    
     
     
 
@@ -215,7 +217,7 @@ def reply_chat(connection,PR):
     message = proto.proto_decrypt(request_text,session_key, PR, public_key)
     message = json.loads(message)
     if message['procedure'] == 'diffie_handshake':
-        response = handle_diffie_handshake(message,PR)
+        response = handle_diffie_handshake(message,PR,token)
 
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection,session_key, PR, public_key,token)

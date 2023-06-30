@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptographicio.first_person_ratchet import FirstPerson
-
+from cryptographicio.second_person_ratchet import SecondPerson
 
 
 HOST = "127.0.0.1"
@@ -29,7 +29,7 @@ TOKEN = None
 SESSION_KEY = None
 SERVER_CONNECTION = None
 CURRENT_USERNAME = None
-
+USERNAME_TO_RATCHET_MAPPING = dict()
 
 def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
@@ -96,31 +96,38 @@ def handle_diffie_handshake(message):
     sending_public_key = initial_key.public_key()
     sending_public_key_string = base64.b64encode(sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
     encrypted_message = proto.proto_encrypt(
-        json.dumps({"procedure": "diffie_handshake", "dst_user": src_user, 
+        json.dumps({"procedure": "diffie_handshake", 
                     "diffie_key": sending_public_key_string}),
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
+    
+    # convert to X25519 public key
+    other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(src_diffie_key))
     shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
 
-    first_person_ratchet = FirstPerson(shared_key)
+    second_person_ratchet = SecondPerson(shared_key)
+    USERNAME_TO_RATCHET_MAPPING[src_user] = {'type':'second', 'person_ratchet':second_person_ratchet}
+    return encrypted_message
     
 
 def listen_to_server(connection,self_private_key,server_public_key):
-    request_text = ""
     while True:
-        data = connection.recv(1024)
-        if data is None:
-            break 
-        request_text += data.decode('utf-8')
-        if len(data) < 1024:
-            break
+        request_text = ""
+        while True:
+            data = connection.recv(1024)
+            if data is None:
+                break 
+            request_text += data.decode('utf-8')
+            if len(data) < 1024:
+                break
 
-    message,_ = proto.proto_decrypt(request_text,SESSION_KEY, self_private_key, server_public_key)
-    message = json.loads(message)
-    print(message)
-    if message['procedure'] == 'diffie handshake':
-        handle_diffie_handshake(message)
+        message,_ = proto.proto_decrypt(request_text,SESSION_KEY, self_private_key, server_public_key)
+        message = json.loads(message)
+        print(message)
+        if message['procedure'] == 'diffie handshake':
+            response = handle_diffie_handshake(message)
+            connection.sendall(response.encode('utf-8'))
     
 
 
