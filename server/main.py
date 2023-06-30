@@ -16,6 +16,7 @@ from database import key_ring_database
 from proto import proto
 from database import user_database
 from database import initialize_database
+from database import group_database
 from cryptographicio import hash_lib
 from cryptographicio import token
 from cryptographicio import nonce_lib
@@ -197,7 +198,14 @@ def handle_diffie_handshake(message,self_private_key,token):
     
     print('salam', request_text)
     
-    
+
+def handle_create_group(message, username, session_key, self_private_key, other_public_key):
+    group_name = message['group_name']
+    group_admin = username
+    group_database.add_group(group_name, group_admin)
+    # add admin to group users
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}),"Server", session_key, self_private_key, other_public_key)
+    return encrypted_message
     
 
 def reply_chat(connection,PR):
@@ -221,6 +229,10 @@ def reply_chat(connection,PR):
 
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection,session_key, PR, public_key,token)
+        connection.sendall(response.encode('utf-8'))
+    
+    if message['procedure'] == 'create_group':
+        response = handle_create_group(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
         
         
