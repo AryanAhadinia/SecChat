@@ -2,6 +2,7 @@ import base64
 import hashlib
 from Crypto import Random
 from Crypto.Cipher import AES
+import os
 
 
 class AESCipher(object):
@@ -27,3 +28,7 @@ class AESCipher(object):
     @staticmethod
     def _unpad(s):
         return s[: -ord(s[len(s) - 1 :])]
+    
+    @staticmethod
+    def _keygen():
+        return os.urandom(32)
