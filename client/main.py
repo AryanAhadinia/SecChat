@@ -15,7 +15,7 @@ from database import salt_database
 from database import message_database
 from cryptographicio import nonce_lib
 from _thread import *
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import PublicFormat
 from cryptographicio.first_person_ratchet import FirstPerson
@@ -242,6 +242,8 @@ def handle_send():
     encrypted_response,_ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
     response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
     other_diffie_public_key = response_message['diffie_key']
+    # convert to X25519 public key
+    other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))
     shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
 
     first_person_ratchet = FirstPerson(shared_key)
