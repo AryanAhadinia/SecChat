@@ -5,8 +5,8 @@ import random
 from pathlib import Path
 import socket
 
-from client.cryptographicio import symmetric_ratchet
-from client.proto import proto
+from cryptographicio import symmetric_ratchet
+from proto import proto
 from cryptographicio import rsa_
 from cryptographicio import hash_lib
 from cryptographicio import nonce_lib
@@ -56,7 +56,7 @@ def decrypt_message(encrypted_message, self_private_key, destination_public_key)
 
 
 def send_receive(message, host, port):
-    global SERVER_CONNECTION
+    global CHAT_CONNECTION
     response = ""
     server_socket = socket.socket()
     server_socket.connect((host, port))
@@ -64,8 +64,7 @@ def send_receive(message, host, port):
     data = server_socket.recv(1024)
     print(data)
     response += data.decode()
-    SERVER_CONNECTION = server_socket
-    return response
+    return response, server_socket
 
 
 def send_request(procedure, payload, self_private_key, destination_public_key, close_connection):
@@ -79,7 +78,7 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
         self_private_key,
         destination_public_key,
     )
-    encrypted_response = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
+    encrypted_response,_ = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
     response = decrypt_message(
         encrypted_response,
         self_private_key,
@@ -91,6 +90,7 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
 def listen_to_server(connection):
     while True:
         input_data = ''
+        print("asdkl")
         data = connection.recv(1024)
         input_data += data.decode('utf-8')
 
@@ -108,7 +108,18 @@ def handshake(self_private_key, server_public_key, server_nonce):
             print("This message is not fresh")
         else:
             SESSION_KEY = base64.b64decode(response_message["key"])
-            start_new_thread(listen_to_server, (SERVER_CONNECTION,))
+            encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "add_socket","token": TOKEN}),TOKEN
+                                                    ,SESSION_KEY,self_private_key, server_public_key )
+            encrypted_response,chat_socket = send_receive(encrypted_message,HOST,DOWNSTREAM_PORT)
+            decrypted_message,_ = proto.proto_decrypt(encrypted_response,SESSION_KEY,self_private_key,server_public_key)
+            decrypted_message = json.loads(decrypted_message)
+            if decrypted_message['status'] == 'OK':
+                print("Socket successfully added to server")
+            else:
+                print("adding socket failed")
+            print("saldkaskdl")
+            start_new_thread(listen_to_server, (chat_socket,))
+            print("ASDsdlksadsddddddddddddddddddddddddddddddddddddddddddddd")
     else:
         print(response_message['error_message'])
 
@@ -222,7 +233,7 @@ def handle_send():
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
-    encrypted_response = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
+    encrypted_response,_ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
     response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
     other_diffie_public_key = response_message['diffie_key']
     shared_key = symmetric_ratchet.hkdf_(initial_key.exchange(other_diffie_public_key), 32)
@@ -234,29 +245,29 @@ def handle_send():
         json.dumps({"procedure": "message", "dst_user": dst_user, "cipher": cipher}), TOKEN, SESSION_KEY,
         PR,
         SERVER_PU)
-    encrypted_response = send_receive(encrypted_message, HOST, UPSTREAM_PORT)
+    encrypted_response,_ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
     response_message, = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
     if response_message['status'] == "OK":
         print("message successfully sent")
     else:
         print(response_message["error_message"])
 
-    def main():
-        global SERVER_PU, PU, PR
-        SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
+def main():
+    global SERVER_PU, PU, PR
+    SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
 
-        while True:
-            command = input()
-            if command == 'register':
-                handle_register(SERVER_PU)
-            elif command == 'login':
-                server_nonce = handle_login(SERVER_PU)
-                if server_nonce is not None:
-                    handshake(PR, SERVER_PU, server_nonce)
-            elif command == 'chats':
-                handle_chats()
-            elif command == 'send':
-                handle_send()
+    while True:
+        command = input()
+        if command == 'register':
+            handle_register(SERVER_PU)
+        elif command == 'login':
+            server_nonce = handle_login(SERVER_PU)
+            if server_nonce is not None:
+                handshake(PR, SERVER_PU, server_nonce)
+        elif command == 'chats':
+            handle_chats()
+        elif command == 'send':
+            handle_send()
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+    main()

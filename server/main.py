@@ -13,7 +13,7 @@ from cryptographicio import aes
 from cryptographicio import rsa_
 from database import key_ring_database
 
-from cryptographicio import aes
+from proto import proto
 from database import user_database
 from database import initialize_database
 from cryptographicio import hash_lib
@@ -28,6 +28,7 @@ PU, PR = None, None
 TOKENS_TO_USERNAME_MAPPING = dict()
 USERNAME_TO_SERVER_NONCE_MAPPING = dict()
 TOKEN_TO_CONNECTION_MAPPING = dict()
+TOKEN_TO_AES_MAPPING = dict()
 
 
 def encrypt_message(message, self_private_key, destination_public_key):
@@ -144,7 +145,7 @@ def reply_response(connection, self_private_key):
 
 def handle_handshake(message, self_private_key, server_nonce, public_key, conn):
     global TOKEN_TO_CONNECTION_MAPPING
-
+    print("message injast" , message)
     nonce = message["nonce"]
 
     if message['server_nonce'] != server_nonce:
@@ -152,12 +153,59 @@ def handle_handshake(message, self_private_key, server_nonce, public_key, conn):
         response_message = {"status": "Error", "error_message": "Handshake not related to previously logged in user"}
     else:
         session_key = aes.AESCipher._keygen()
+        TOKEN_TO_AES_MAPPING[message['token']] = session_key
         response_message = {"status": "OK", "nonce": nonce, "key": base64.b64encode(session_key).decode()}
-        TOKEN_TO_CONNECTION_MAPPING[token] = conn
+        
     encrypted_message = encrypt_message(json.dumps(response_message), self_private_key, public_key)
     print(nonce)
     return encrypted_message
 
+def handle_add_socket(connection, session_key,self_private_key,other_public_key):
+    TOKEN_TO_CONNECTION_MAPPING[token] = connection
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}),"Server"
+                                                    ,session_key, self_private_key, other_public_key )
+    return encrypted_message
+
+def handle_diffie_handshake(message,token):
+    dst_username = message['dst_username']
+    connection = TOKEN_TO_CONNECTION_MAPPING[token]
+    
+
+def reply_chat(connection,PR):
+    request_text = ""
+    data = connection.recv(1024)
+    request_text += data.decode('utf-8')
+    token = proto.proto_get_token(request_text, PR)
+    print("lsadkfalskd", token)
+    username = TOKENS_TO_USERNAME_MAPPING[token]
+    print(TOKENS_TO_USERNAME_MAPPING, TOKEN_TO_AES_MAPPING)
+    public_key = key_ring_database.get_user_valid_key(username)
+    session_key = TOKEN_TO_AES_MAPPING[token]
+    
+    message = proto.proto_decrypt(request_text,session_key, PR, public_key)
+    message = json.loads(message)
+    if message['procedure'] == 'diffie_handshake':
+        handle_diffie_handshake(message)
+
+    if message['procedure'] == 'add_socket':
+        response = handle_add_socket(connection,session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+        
+        
+
+
+def new_protocol(PU,PR):
+    try:
+        connection_socket = socket.socket()
+        connection_socket.bind((HOST, DOWNSTREAM_PORT))
+        print("Socket chat is listening ...")
+        connection_socket.listen(5)
+        while True:
+            connection, address = connection_socket.accept()
+            print("Connected to: " + address[0] + ":" + str(address[1]))
+            start_new_thread(reply_chat, (connection, PR,))
+    except socket.error as e:
+        print(str(e))
 
 def main():
     initialize_database.create_tables()
@@ -167,6 +215,7 @@ def main():
     try:
         connection_socket.bind((HOST, UPSTREAM_PORT))
         print("Socket is listening ...")
+        start_new_thread(new_protocol,(PU,PR,))
         connection_socket.listen(5)
         while True:
             connection, address = connection_socket.accept()
@@ -174,6 +223,8 @@ def main():
             start_new_thread(reply_response, (connection, PR,))
     except socket.error as e:
         print(str(e))
+    
+    
 
 
 if __name__ == "__main__":

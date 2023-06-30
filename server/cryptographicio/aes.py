@@ -8,7 +8,10 @@ import os
 class AESCipher(object):
     def __init__(self, key):
         self.bs = AES.block_size
-        self.key = hashlib.sha256(key.encode()).digest()
+        if type(key) == bytes:
+            self.key = key      
+        else:
+            self.key = hashlib.sha256(key.encode()).digest()
 
     def encrypt(self, raw):
         raw = self._pad(raw)

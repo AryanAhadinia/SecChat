@@ -1,7 +1,7 @@
-from client.cryptographicio import symmetric_ratchet.symmetric_ratchet
-from client.cryptographicio import b64.b64
-from client.cryptographicio import hkdf_.hkdf
-from client.cryptographicio import padding.pad, padding.unpad
+from cryptographicio.symmetric_ratchet import SymmetricRatchet
+from cryptographicio.b64 import b64
+from cryptographicio.hkdf_ import hkdf
+from cryptographicio.padding import pad, unpad
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
