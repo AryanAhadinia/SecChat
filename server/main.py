@@ -169,7 +169,7 @@ def handle_add_socket(connection, session_key,self_private_key,other_public_key)
 def handle_diffie_handshake(message,token):
     dst_username = message['dst_username']
     connection = TOKEN_TO_CONNECTION_MAPPING[token]
-    
+    print(message)
 
 def reply_chat(connection,PR):
     request_text = ""

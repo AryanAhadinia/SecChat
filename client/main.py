@@ -90,7 +90,6 @@ def send_request(procedure, payload, self_private_key, destination_public_key, c
 def listen_to_server(connection):
     while True:
         input_data = ''
-        print("asdkl")
         data = connection.recv(1024)
         input_data += data.decode('utf-8')
 
@@ -229,7 +228,8 @@ def handle_send():
 
     initial_key = X25519PrivateKey.generate()
     encrypted_message = proto.proto_encrypt(
-        json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user, "diffie_key": initial_key.public_key()}),
+        json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user, 
+                    "diffie_key": base64.b64encode(initial_key.public_key()).decode()}),
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
