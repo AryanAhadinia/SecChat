@@ -11,7 +11,6 @@ from database import initialize_database
 from database import salt_database
 from cryptographicio import nonce_lib
 
-
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
@@ -79,12 +78,13 @@ def send_request(procedure, payload, self_private_key, destination_public_key):
     return response
 
 
-def handshake(self_public_key, self_private_key, server_public_key,server_nonce):
+def handshake(self_public_key, self_private_key, server_public_key, server_nonce):
     global SESSION_KEY
     nonce = nonce_lib.generate_nonce()
     self_public_key_string = base64.b64encode(self_public_key.save_pkcs1("PEM")).decode()
     response_message = \
-        send_request("handshake", {"nonce": nonce, "token": TOKEN,"server_nonce": server_nonce}, self_private_key, server_public_key)
+        send_request("handshake", {"nonce": nonce, "token": TOKEN, "server_nonce": server_nonce}, self_private_key,
+                     server_public_key)
     response_message = json.loads(response_message)
     if response_message["status"] == 'OK':
         nonce_from_server = response_message["nonce"]
@@ -94,7 +94,6 @@ def handshake(self_public_key, self_private_key, server_public_key,server_nonce)
             SESSION_KEY = base64.b64decode(response_message["key"])
     else:
         print(response_message['error_message'])
-    
 
 
 def handle_register(server_public_key):
@@ -178,7 +177,7 @@ def main():
         elif command == 'login':
             server_nonce = handle_login(SERVER_PU)
             if server_nonce is not None:
-                handshake(PU, PR , SERVER_PU, server_nonce)
+                handshake(PU, PR, SERVER_PU, server_nonce)
 
 
 if __name__ == "__main__":
