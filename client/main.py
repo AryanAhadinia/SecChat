@@ -10,6 +10,7 @@ from proto import proto
 from cryptographicio import rsa_
 from cryptographicio import hash_lib
 from cryptographicio import nonce_lib
+from cryptographicio import key_sec_channel
 from database import initialize_database
 from database import salt_database
 from database import message_database
@@ -115,6 +116,8 @@ def handle_diffie_handshake(message):
     # convert to X25519 public key
     other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(src_diffie_key))
     shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
+
+    print(key_sec_channel.to_emojies(shared_key))
 
     second_person_ratchet = SecondPerson(shared_key)
     second_person_ratchet.DH_ratchet = initial_key
