@@ -1,5 +1,5 @@
 from database import database_
-
+import base64
 from cryptographicio import aes
 
 
@@ -26,7 +26,7 @@ def get_messages(path, name, username, password):
     aes_ = aes.AESCipher(password)
     for i in range(len(result)):
         result[i] = list(result[i])
-        result[i][2] = aes_.decrypt(result[i][2])
+        result[i][2] = base64.b64decode(aes_.decrypt(result[i][2]).encode()).decode()
         result[i] = tuple(result[i])
 
     return result
@@ -37,7 +37,7 @@ def add_message(path, name, src_user, dst_user, encrypted_context, group_name, s
                             VALUES (?, ?, ?, ?)"""
     
     aes_ = aes.AESCipher(password)
-    encrypted_context = aes_.encrypt(encrypted_context)
+    encrypted_context = aes_.encrypt(base64.b64encode(encrypted_context.encode()).decode())
 
     args = (src_user, dst_user, encrypted_context, sign, group_name)
 
