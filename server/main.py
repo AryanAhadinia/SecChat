@@ -284,7 +284,7 @@ def handle_create_group(message, username, session_key, self_private_key, other_
     try:
         group_database.add_group(group_name, group_admin)
     except IntegrityError:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Already exists"}), "Server",
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "Already exists"}), "Server",
                                                 session_key, self_private_key, other_public_key)
         return encrypted_message
     group_member_database.add_user_to_group(group_database.get_group_id(group_name), group_admin)
@@ -300,7 +300,7 @@ def handle_add_user_to_group(message, username, session_key, self_private_key, o
         group_id = group_database.get_group_id(group_name)
     except:
         encrypted_message = proto.proto_encrypt(json.dumps({
-            "status": "Failed"}),
+            "status": "Failed", "message":"group does not exist"}),
             "Server", session_key, self_private_key, other_public_key)
         print(encrypted_message)
         return encrypted_message
@@ -313,6 +313,7 @@ def handle_add_user_to_group(message, username, session_key, self_private_key, o
             other_public_key)
         return encrypted_message
     try:
+        
         group_member_database.add_user_to_group(group_id, new_user)
     except:
         encrypted_message = proto.proto_encrypt(

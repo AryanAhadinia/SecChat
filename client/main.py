@@ -371,7 +371,7 @@ def handle_create_group():
     if response_message['status'] == "OK":
         print("group successfully created")
     else:
-        print(response_message["error_message"])
+        print(response_message["message"])
 
 
 def handle_add_user_to_group():
