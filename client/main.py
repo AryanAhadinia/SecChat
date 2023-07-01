@@ -402,6 +402,18 @@ def handle_get_group_members(group_name):
         print(response_message["error_message"])
 
 
+def handle_view_groups():
+    message = json.dumps({"procedure": "get_groups_for_user"})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        return response_message['groups']
+    else:
+        print(response_message["error_message"])
+
+
 def main():
     global SERVER_PU, PU, PR
     SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
@@ -424,6 +436,10 @@ def main():
             handle_add_user_to_group()
         elif command == 'remove_user_from_group':
             handle_remove_user_from_group()
+        elif command == 'get_group_members':
+            handle_get_group_members()
+        elif command == 'view_groups':
+            handle_view_groups()
         else:
             print("invalid command")
 
