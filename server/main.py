@@ -205,7 +205,7 @@ def handle_diffie_handshake(message, self_private_key, token):
 
     source_session_key = TOKEN_TO_AES_MAPPING[token]
     source_public_key = key_ring_database.get_user_valid_key(username)
-    
+
     decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
     loaded_message = json.loads(decrypted_message)
     diffie_key = loaded_message['diffie_key']
@@ -214,7 +214,8 @@ def handle_diffie_handshake(message, self_private_key, token):
                                                        source_public_key)
     return encrypted_response_to_source
 
-def handle_get_massage(message,self_private_key,token):
+
+def handle_get_massage(message, self_private_key, token):
     dst_username = message['dst_user']
     session_key = get_sessionkey_from_username(dst_username)
     dst_token = get_token_from_username(dst_username)
@@ -222,10 +223,40 @@ def handle_get_massage(message,self_private_key,token):
     username = TOKENS_TO_USERNAME_MAPPING[token]
     src_diffie_helman = message['diffie_key']
     other_public_key = key_ring_database.get_user_valid_key(dst_username)
-    encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "message",
-                                                        "diffie_key": src_diffie_helman,"cipher":message['cipher'],"src_username": username}),
-                                            "Server"
-                                            , session_key, self_private_key, other_public_key)
+    src_public_key = key_ring_database.get_user_valid_key(username)
+
+    group_name = message['group_name']
+    try:
+        group_id = group_database.get_group_id(group_name)
+    except:
+        response = proto.proto_encrypt(
+            json.dumps({"status": "error", "error_message": "this group is not valid or you are not in it"}),
+            # this group is not valid
+            token,
+            TOKEN_TO_AES_MAPPING[token],
+            self_private_key,
+            src_public_key)
+        return response
+
+    members = group_member_database.get_group_members(group_id)
+    if username not in members:
+        response = proto.proto_encrypt(
+            json.dumps({"status": "error", "error_message": "this group is not valid or you are not in it"}),
+            # you are not in this group
+            token,
+            TOKEN_TO_AES_MAPPING[token],
+            self_private_key,
+            src_public_key)
+        return response
+
+    encrypted_message = proto.proto_encrypt(json.dumps(
+        {"procedure": "message",
+         "diffie_key": src_diffie_helman,
+         "cipher": message['cipher'],
+         "src_username": username,
+         "group_name": group_name}),
+        "Server"
+        , session_key, self_private_key, other_public_key)
     connection.sendall(encrypted_message.encode('utf-8'))
     diffie_response = ""
     while True:
@@ -235,10 +266,10 @@ def handle_get_massage(message,self_private_key,token):
         diffie_response += data.decode('utf-8')
         if len(data) < 1024:
             break
-    
+
     source_session_key = TOKEN_TO_AES_MAPPING[token]
     source_public_key = key_ring_database.get_user_valid_key(username)
-    
+
     decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
     loaded_message = json.loads(decrypted_message)
     encrypted_response_to_source = proto.proto_encrypt(json.dumps({"status": loaded_message['status']}), "Server",
@@ -253,10 +284,12 @@ def handle_create_group(message, username, session_key, self_private_key, other_
     try:
         group_database.add_group(group_name, group_admin)
     except IntegrityError:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Already exists"}), "Server", session_key, self_private_key, other_public_key)
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Already exists"}), "Server",
+                                                session_key, self_private_key, other_public_key)
         return encrypted_message
     group_member_database.add_user_to_group(group_database.get_group_id(group_name), group_admin)
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
     return encrypted_message
 
 
@@ -265,19 +298,29 @@ def handle_add_user_to_group(message, username, session_key, self_private_key, o
     new_user = message['new_user']
     try:
         group_id = group_database.get_group_id(group_name)
-    except IntegrityError:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Operation failed, make sure you are adding a correct user to a correct group."}), "Server", session_key, self_private_key, other_public_key)
+    except:
+        encrypted_message = proto.proto_encrypt(json.dumps({
+            "status": "Failed"}),
+            "Server", session_key, self_private_key, other_public_key)
+        print(encrypted_message)
         return encrypted_message
     group_admin = group_database.get_group_admin(group_id)
     if group_admin != username:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not admin"}), "Server", session_key, self_private_key, other_public_key)
+        encrypted_message = proto.proto_encrypt(json.dumps(
+            {"status": "Failed", "message": "You are not admin"}),
+            "Server", session_key,
+            self_private_key,
+            other_public_key)
         return encrypted_message
     try:
         group_member_database.add_user_to_group(group_id, new_user)
-    except IntegrityError:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Operation failed. Already in"}), "Server", session_key, self_private_key, other_public_key)
+    except:
+        encrypted_message = proto.proto_encrypt(
+            json.dumps({"status": "Failed", "message": "Operation failed. Already in"}), "Server", session_key,
+            self_private_key, other_public_key)
         return encrypted_message
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
     return encrypted_message
 
 
@@ -287,10 +330,12 @@ def handle_remove_user_from_group(message, username, session_key, self_private_k
     group_id = group_database.get_group_id(group_name)
     group_admin = group_database.get_group_admin(group_id)
     if group_admin != username:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not admin"}), "Server", session_key, self_private_key, other_public_key)
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not admin"}), "Server", session_key,
+                                                self_private_key, other_public_key)
         return encrypted_message
     group_member_database.remove_user_from_group(group_id, user_to_remove)
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
     return encrypted_message
 
 
@@ -299,15 +344,18 @@ def handle_get_group_members(message, username, session_key, self_private_key, o
     group_id = group_database.get_group_id(group_name)
     group_members = group_member_database.get_group_members(group_id)
     if username not in group_members:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not in this group"}), "Server", session_key, self_private_key, other_public_key)
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not in this group"}), "Server",
+                                                session_key, self_private_key, other_public_key)
         return encrypted_message
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "group_members": group_members}), "Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "group_members": group_members}), "Server",
+                                            session_key, self_private_key, other_public_key)
     return encrypted_message
 
 
 def handle_get_groups_for_user(message, username, session_key, self_private_key, other_public_key):
     groups = group_member_database.get_groups_for_user(username)
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "groups": groups}), "Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "groups": groups}), "Server", session_key,
+                                            self_private_key, other_public_key)
     return encrypted_message
 
 
@@ -318,7 +366,8 @@ def handle_get_online_users(message, username, session_key, self_private_key, ot
     live_users = list()
     for token in live_socket_tokens:
         live_users.append(TOKENS_TO_USERNAME_MAPPING[token])
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "online_users": live_users}), "Server", session_key, self_private_key, other_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "online_users": live_users}), "Server",
+                                            session_key, self_private_key, other_public_key)
     return encrypted_message
 
 
@@ -347,7 +396,7 @@ def reply_chat(connection, PR):
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection, session_key, PR, public_key, token)
         connection.sendall(response.encode('utf-8'))
-        
+
     if message['procedure'] == 'create_group':
         response = handle_create_group(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))

@@ -159,7 +159,7 @@ def listen_to_server(connection, self_private_key, server_public_key):
             database_path = Path(f"client/database/databases/{CURRENT_USERNAME}")
             database_name = f'{CURRENT_USERNAME}.db'
             message_database.add_message(database_path, database_name, message['src_username'], CURRENT_USERNAME,
-                                         decrypted_message)
+                                         decrypted_message, message['group_name'])
             connection.sendall(response.encode('utf-8'))
 
 
@@ -280,6 +280,8 @@ def handle_chats():
     results = message_database.get_messages(database_path, database_name, CURRENT_USERNAME)
 
     for result in results:
+        if result[3] != "":
+            print(f"In Group: {result[3]}")
         print(f"from {result[0]} to {result[1]}:")
         print(result[2])
 
@@ -295,11 +297,15 @@ def handle_send():
     if target.upper() == 'I':
         target_name = input("Dest Username: ")
         dst_users = [target_name]
+        group_name = ""
     elif target.upper() == 'G':
         target_name = input("Dest Group: ")
         dst_users = handle_get_group_members(target_name)
+        group_name = target_name
     message = input(f"{target_name} << ")
     for dst_user in dst_users:
+        if dst_user == CURRENT_USERNAME:
+            continue
         if USERNAME_TO_RATCHET_MAPPING.get(dst_user) is None:
             initial_key = X25519PrivateKey.generate()
             sending_public_key = initial_key.public_key()
@@ -331,13 +337,14 @@ def handle_send():
             new_pub_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
         cipher = person_ratchet.send(message.encode('utf-8'))
         cipher_string = base64.b64encode(cipher).decode()
+
         encrypted_message = proto.proto_encrypt(
             json.dumps({
                 "procedure": "message",
                 "dst_user": dst_user,
                 "cipher": cipher_string,
                 "diffie_key": new_public_key_string,
-                "type": target.upper(),
+                "group_name": group_name,
                 "target_name": target_name
             }),
             TOKEN,
@@ -378,7 +385,7 @@ def handle_add_user_to_group():
     if response_message['status'] == "OK":
         print("user successfully added to group")
     else:
-        print(response_message["error_message"])
+        print(response_message["message"])
 
 
 def handle_remove_user_from_group():
@@ -393,7 +400,7 @@ def handle_remove_user_from_group():
     if response_message['status'] == "OK":
         print("user successfully removed from group")
     else:
-        print(response_message["error_message"])
+        print(response_message["message"])
 
 
 def handle_get_group_members(group_name):
