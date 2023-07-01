@@ -6,17 +6,18 @@ def create_database():
         CREATE TABLE IF NOT EXISTS 
         GROUP_MEMBER
         (
-			group_id INTEGER PRIMARY KEY AUTOINCREMENT,
+			group_id INTEGER,
 			username VARCHAR (50),
 			FOREIGN KEY(group_id) REFERENCES GROUP_DB(group_id) ON DELETE RESTRICT ON UPDATE RESTRICT,
-			FOREIGN KEY(username) REFERENCES USER(username) ON DELETE CASCADE ON UPDATE CASCADE
+			FOREIGN KEY(username) REFERENCES USER(username) ON DELETE CASCADE ON UPDATE CASCADE,
+			PRIMARY KEY (group_id, username)
     	);
     """
     index_sql1 = (
-        """CREATE UNIQUE INDEX IF NOT EXISTS idx_group_id ON GROUP_MEMBER (group_id);"""
+        """CREATE INDEX IF NOT EXISTS idx_group_id ON GROUP_MEMBER (group_id);"""
     )
     index_sql2 = (
-        """CREATE UNIQUE INDEX IF NOT EXISTS idx_username ON GROUP_MEMBER (username);"""
+        """CREATE INDEX IF NOT EXISTS idx_username ON GROUP_MEMBER (username);"""
     )
 
     database.execute_sql(create_sql, ())
@@ -25,6 +26,7 @@ def create_database():
 
 
 def add_user_to_group(group_id, username):
+    print(group_id, username)
     sql = """INSERT INTO GROUP_MEMBER (group_id, username) VALUES (?, ?);"""
     args = (group_id, username)
     database.execute_sql(sql, args)
