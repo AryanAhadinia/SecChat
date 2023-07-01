@@ -6,8 +6,9 @@ def create_database():
         CREATE TABLE IF NOT EXISTS 
         GROUP_MEMBER
         (
-			group_id INTEGER PRIMARY KEY AUTOINCREMENT,
+			group_id INTEGER AUTOINCREMENT,
 			username VARCHAR (50),
+            PRIMARY KEY(group_id, username),
 			FOREIGN KEY(group_id) REFERENCES GROUP_DB(group_id) ON DELETE RESTRICT ON UPDATE RESTRICT,
 			FOREIGN KEY(username) REFERENCES USER(username) ON DELETE CASCADE ON UPDATE CASCADE
     	);
