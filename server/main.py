@@ -22,6 +22,8 @@ from cryptographicio import hash_lib
 from cryptographicio import token
 from cryptographicio import nonce_lib
 
+from sqlite3 import IntegrityError
+
 HOST = "127.0.0.1"
 UPSTREAM_PORT = 8080
 DOWNSTREAM_PORT = 8085
@@ -248,8 +250,11 @@ def handle_get_massage(message,self_private_key,token):
 def handle_create_group(message, username, session_key, self_private_key, other_public_key):
     group_name = message['group_name']
     group_admin = username
-    group_database.add_group(group_name, group_admin)
-    print(group_database.get_group_id(group_name))
+    try:
+        group_database.add_group(group_name, group_admin)
+    except IntegrityError:
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Already exists"}), "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
     group_member_database.add_user_to_group(group_database.get_group_id(group_name), group_admin)
     encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
     return encrypted_message
@@ -258,12 +263,20 @@ def handle_create_group(message, username, session_key, self_private_key, other_
 def handle_add_user_to_group(message, username, session_key, self_private_key, other_public_key):
     group_name = message['group_name']
     new_user = message['new_user']
-    group_id = group_database.get_group_id(group_name)
+    try:
+        group_id = group_database.get_group_id(group_name)
+    except IntegrityError:
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Operation failed, make sure you are adding a correct user to a correct group."}), "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
     group_admin = group_database.get_group_admin(group_id)
     if group_admin != username:
         encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not admin"}), "Server", session_key, self_private_key, other_public_key)
         return encrypted_message
-    group_member_database.add_user_to_group(group_id, new_user)
+    try:
+        group_member_database.add_user_to_group(group_id, new_user)
+    except IntegrityError:
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "messege": "Operation failed. Already in"}), "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
     encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
     return encrypted_message
 
