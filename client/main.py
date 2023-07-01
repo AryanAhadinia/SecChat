@@ -158,7 +158,7 @@ def listen_to_server(connection, self_private_key, server_public_key):
             if len(data) < 1024:
                 break
 
-        message, _ = proto.proto_decrypt(request_text, SESSION_KEY, self_private_key, server_public_key)
+        message, _, sign = proto.proto_decrypt_get_sign(request_text, SESSION_KEY, self_private_key, server_public_key)
         message = json.loads(message)
         print(message)
         if message['procedure'] == 'diffie handshake':
@@ -169,7 +169,7 @@ def listen_to_server(connection, self_private_key, server_public_key):
             database_path = Path(f"client/database/databases/{CURRENT_USERNAME}")
             database_name = f'{CURRENT_USERNAME}.db'
             message_database.add_message(database_path, database_name, message['src_username'], CURRENT_USERNAME,
-                                         decrypted_message, message['group_name'], PASSWORD_HASH)
+                                         decrypted_message, message['group_name'], sign, PASSWORD_HASH)
             connection.sendall(response.encode('utf-8'))
 
 

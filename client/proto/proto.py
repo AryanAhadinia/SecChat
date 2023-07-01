@@ -34,3 +34,19 @@ def proto_decrypt(packet: str, aes_key: bytes, self_private_key, other_public_ke
     return content["message"], decrypt(
         base64.b64decode(packet["token"].encode()), self_private_key
     )
+
+
+def proto_decrypt_get_sign(packet: str, aes_key: bytes, self_private_key, other_public_key):
+    packet = json.loads(base64.b64decode(packet.encode()).decode())
+    aes_ = AESCipher(aes_key)
+    content_json = aes_.decrypt(base64.b64decode(packet["content_json"].encode()))
+    content = json.loads(content_json)
+    if not verify(
+        content["message"],
+        base64.b64decode(content["signature"].encode()),
+        other_public_key,
+    ):
+        raise Exception("Invalid signature")
+    return content["message"], decrypt(
+        base64.b64decode(packet["token"].encode()), self_private_key
+    ), content["signature"]
