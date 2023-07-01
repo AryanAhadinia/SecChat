@@ -302,7 +302,6 @@ def handle_send():
         response_message,_ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
         response_message = json.loads(response_message)
         other_diffie_public_key = response_message['diffie_key']
-        # convert to X25519 public key
         other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))
         shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
         person_ratchet = FirstPerson(shared_key)
@@ -314,7 +313,7 @@ def handle_send():
         person_ratchet = USERNAME_TO_RATCHET_MAPPING[dst_user]['person_ratchet']
         other_diffie_public_key = USERNAME_TO_RATCHET_MAPPING[dst_user]['public_key']
 
-    message = input(">>")
+    message = input(">> ")
     new_pub_key = person_ratchet.dh_ratchet_send(other_diffie_public_key)
     new_public_key_string = base64.b64encode(
             new_pub_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
@@ -329,6 +328,47 @@ def handle_send():
     response_message = json.loads(response_message)
     if response_message['status'] == "OK":
         print("message successfully sent")
+    else:
+        print(response_message["error_message"])
+
+
+def handle_create_group():
+    group_name = input("Group Name: ")
+    message = json.dumps({"procedure": "create_group", "group_name": group_name})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        print("group successfully created")
+    else:
+        print(response_message["error_message"])
+
+
+def handle_add_user_to_group():
+    group_name = input("Group Name: ")
+    new_user = input("New User: ")
+    message = json.dumps({"procedure": "add_user_to_group", "group_name": group_name, "new_user": new_user})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        print("user successfully added to group")
+    else:
+        print(response_message["error_message"])
+
+
+def handle_remove_user_from_group():
+    group_name = input("Group Name: ")
+    user_to_remove = input("User to remove: ")
+    message = json.dumps({"procedure": "remove_user_from_group", "group_name": group_name, "user_to_remove": user_to_remove})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        print("user successfully removed from group")
     else:
         print(response_message["error_message"])
 
@@ -349,6 +389,15 @@ def main():
             handle_chats()
         elif command == 'send':
             handle_send()
+        elif command == 'create_group':
+            handle_create_group()
+        elif command == 'add_user_to_group':
+            handle_add_user_to_group()
+        elif command == 'remove_user_from_group':
+            handle_remove_user_from_group()
+        else:
+            print("invalid command")
+
 
 
 if __name__ == "__main__":
