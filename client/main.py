@@ -171,6 +171,8 @@ def listen_to_server(connection, self_private_key, server_public_key):
             message_database.add_message(database_path, database_name, message['src_username'], CURRENT_USERNAME,
                                          decrypted_message, message['group_name'], PASSWORD_HASH)
             connection.sendall(response.encode('utf-8'))
+        if message['procedure'] == 'ping':
+            pass
 
 
 def handshake(self_private_key, server_public_key, server_nonce):
@@ -453,6 +455,19 @@ def handle_view_groups():
     else:
         print(response_message["error_message"])
 
+def handle_get_online_members():
+    message = json.dumps({"procedure": "get_online_users"})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        online_users = response_message['online_users']
+        for user in online_users:
+            print(user)
+    else:
+        print(response_message["error_message"])
+
 
 def main():
     global SERVER_PU, PU, PR
@@ -480,6 +495,8 @@ def main():
             handle_get_group_members()
         elif command == 'view_groups':
             handle_view_groups()
+        elif command == 'get_online_users':
+            handle_get_online_members()
         else:
             print("invalid command")
 

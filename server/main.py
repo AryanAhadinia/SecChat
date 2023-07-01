@@ -33,7 +33,7 @@ TOKENS_TO_USERNAME_MAPPING = dict()
 USERNAME_TO_SERVER_NONCE_MAPPING = dict()
 TOKEN_TO_CONNECTION_MAPPING = dict()
 TOKEN_TO_AES_MAPPING = dict()
-
+ONLINE_USERS = []
 
 def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
@@ -124,6 +124,8 @@ def reply_response(connection, self_private_key):
         else:
             connection.send("Signature validation failed".encode('utf-8'))
         connection.close()
+    
+       
 
     if message["procedure"] == "handshake":
         token = message["payload"]["token"]
@@ -378,13 +380,37 @@ def handle_get_groups_for_user(message, username, session_key, self_private_key,
 
 
 def handle_get_online_users(message, username, session_key, self_private_key, other_public_key):
-    live_socket_tokens = set()
+    socket_tokens = list()
+    sockets = list()
     for token, connection in TOKEN_TO_CONNECTION_MAPPING.items():
-        live_socket_tokens.add(token)
-    live_users = list()
-    for token in live_socket_tokens:
-        live_users.append(TOKENS_TO_USERNAME_MAPPING[token])
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "online_users": live_users}), "Server",
+        socket_tokens.append(token)
+        sockets.append(connection)
+
+    users = list()
+    for token in socket_tokens:
+        users.append(TOKENS_TO_USERNAME_MAPPING[token])
+    delete_indexes = list()
+    for indx,connection in enumerate(sockets):
+        try:
+            user_session_key = TOKEN_TO_AES_MAPPING[socket_tokens[indx]]
+            print(user_session_key)
+            user_other_public_key = key_ring_database.get_user_valid_key(users[indx])
+            print(user_other_public_key)
+            encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "ping"}), "Server",
+                                            user_session_key, self_private_key, user_other_public_key)
+            connection.sendall(encrypted_message.encode('utf-8'))
+        except Exception as e:
+            print(str(e))
+            delete_indexes.append(indx)
+
+    for idx in delete_indexes:
+        del TOKEN_TO_AES_MAPPING[list(TOKEN_TO_AES_MAPPING.keys())[idx]]
+        del TOKEN_TO_CONNECTION_MAPPING[list(TOKEN_TO_CONNECTION_MAPPING.keys())[idx]]
+        del TOKENS_TO_USERNAME_MAPPING[list(TOKENS_TO_USERNAME_MAPPING.keys())[idx]]
+        del users[idx]
+
+
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "online_users": users}), "Server",
                                             session_key, self_private_key, other_public_key)
     return encrypted_message
 
@@ -414,7 +440,7 @@ def reply_chat(connection, PR):
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection, session_key, PR, public_key, token)
         connection.sendall(response.encode('utf-8'))
-
+   
     if message['procedure'] == 'create_group':
         response = handle_create_group(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
