@@ -36,3 +36,9 @@ class AESCipher(object):
     @staticmethod
     def _keygen():
         return os.urandom(32)
+
+
+def recrypt(data, old_key, new_key):
+    old_aes = AESCipher(old_key)
+    new_aes = AESCipher(new_key)
+    return new_aes.encrypt(old_aes.decrypt(data))
