@@ -12,19 +12,16 @@ class FirstPerson(object):
     def __init__(self, shared_key):
         self.sk = shared_key
         self.DHratchet = None
-
-    def init_ratchets(self):
-        # initialise the root chain with the shared key
-        self.root_ratchet = symmetric_ratchet(self.sk)
+        self.root_ratchet = SymmetricRatchet(self.sk)
         # initialise the sending and recving chains
-        self.send_ratchet = symmetric_ratchet(self.root_ratchet.next()[0])
-        self.recv_ratchet = symmetric_ratchet(self.root_ratchet.next()[0])
+        self.send_ratchet = SymmetricRatchet(self.root_ratchet.next()[0])
+        self.recv_ratchet = SymmetricRatchet(self.root_ratchet.next()[0])
 
     def dh_ratchet_send(self, second_person_public):
         self.DHratchet = X25519PrivateKey.generate()
         dh_send = self.DHratchet.exchange(second_person_public)
         shared_send = self.root_ratchet.next(dh_send)[0]
-        self.send_ratchet = symmetric_ratchet(shared_send)
+        self.send_ratchet = SymmetricRatchet(shared_send)
         print('[Alice]\tSend ratchet seed:', b64(shared_send))
         return self.DHratchet.public_key()
 
@@ -35,7 +32,7 @@ class FirstPerson(object):
             shared_recv = self.root_ratchet.next(dh_recv)[0]
             # use Bob's public and our old private key
             # to get a new recv ratchet
-            self.recv_ratchet = symmetric_ratchet(shared_recv)
+            self.recv_ratchet = SymmetricRatchet(shared_recv)
             print('[Alice]\tRecv ratchet seed:', b64(shared_recv))
 
     def send(self, msg):
@@ -46,7 +43,7 @@ class FirstPerson(object):
 
     def recv(self, cipher, second_person_public_key):
         # receive Bob's new public key and use it to perform a DH
-        self.dh_ratchet(second_person_public_key)
+        #self.dh_ratchet(second_person_public_key)
         key, iv = self.recv_ratchet.next()
         # decrypt the message using the new recv ratchet
         msg = unpad(AES.new(key, AES.MODE_CBC, iv).decrypt(cipher))

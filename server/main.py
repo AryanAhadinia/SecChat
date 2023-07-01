@@ -180,7 +180,6 @@ def get_token_from_username(username):
 
 def handle_diffie_handshake(message, self_private_key, token):
     dst_username = message['dst_user']
-    print(TOKENS_TO_USERNAME_MAPPING, TOKEN_TO_CONNECTION_MAPPING, dst_username)
     session_key = get_sessionkey_from_username(dst_username)
     dst_token = get_token_from_username(dst_username)
     connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
@@ -203,11 +202,43 @@ def handle_diffie_handshake(message, self_private_key, token):
 
     source_session_key = TOKEN_TO_AES_MAPPING[token]
     source_public_key = key_ring_database.get_user_valid_key(username)
-
-    decrypted_message = proto.proto_decrypt(diffie_response, source_session_key, self_private_key, source_public_key)
+    
+    decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
     loaded_message = json.loads(decrypted_message)
     diffie_key = loaded_message['diffie_key']
     encrypted_response_to_source = proto.proto_encrypt(json.dumps({"diffie_key": diffie_key}), "Server",
+                                                       source_session_key, self_private_key,
+                                                       source_public_key)
+    return encrypted_response_to_source
+
+def handle_get_massage(message,self_private_key,token):
+    dst_username = message['dst_user']
+    session_key = get_sessionkey_from_username(dst_username)
+    dst_token = get_token_from_username(dst_username)
+    connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
+    username = TOKENS_TO_USERNAME_MAPPING[token]
+    src_diffie_helman = message['diffie_key']
+    other_public_key = key_ring_database.get_user_valid_key(dst_username)
+    encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "message",
+                                                        "diffie_key": src_diffie_helman,"cipher":message['cipher'],"src_username": username}),
+                                            "Server"
+                                            , session_key, self_private_key, other_public_key)
+    connection.sendall(encrypted_message.encode('utf-8'))
+    diffie_response = ""
+    while True:
+        data = connection.recv(1024)
+        if data is None:
+            break
+        diffie_response += data.decode('utf-8')
+        if len(data) < 1024:
+            break
+    
+    source_session_key = TOKEN_TO_AES_MAPPING[token]
+    source_public_key = key_ring_database.get_user_valid_key(username)
+    
+    decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
+    loaded_message = json.loads(decrypted_message)
+    encrypted_response_to_source = proto.proto_encrypt(json.dumps({"status": loaded_message['status']}), "Server",
                                                        source_session_key, self_private_key,
                                                        source_public_key)
     return encrypted_response_to_source
@@ -242,7 +273,9 @@ def reply_chat(connection, PR):
     if message['procedure'] == 'diffie_handshake':
         response = handle_diffie_handshake(message, PR, token)
         connection.sendall(response.encode('utf-8'))
-
+    if message['procedure'] == 'message':
+        response = handle_get_massage(message, PR, token)
+        connection.sendall(response.encode('utf-8'))
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection, session_key, PR, public_key, token)
         connection.sendall(response.encode('utf-8'))
