@@ -502,6 +502,24 @@ def handle_change_password():
         print(response_message["error_message"])
 
 
+def handle_change_public_key():
+    global PU, PR
+    new_pu, new_pr = rsa_.generate_keypair()
+    new_pu_to_send = base64.b64encode(new_pu.save_pkcs1("PEM")).decode()
+    message = json.dumps({"procedure": "change_public_key", "username": CURRENT_USERNAME, "new_public_key": new_pu_to_send})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        print("public key successfully changed")
+        PU = new_pu
+        PR = new_pr
+        rsa_.write_keys(PU, PR, Path(f"client/keys/client/{CURRENT_USERNAME}"), PASSWORD_HASH)
+    else:
+        print(response_message["error_message"])
+
+
 def main():
     global SERVER_PU, PU, PR
     SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
@@ -532,6 +550,8 @@ def main():
             handle_get_online_members()
         elif command == 'change_password':
             handle_change_password()
+        elif command == 'change_public_key':
+            handle_change_public_key()
         else:
             print("invalid command")
 

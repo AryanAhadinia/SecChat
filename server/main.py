@@ -432,6 +432,19 @@ def handle_get_online_users(message, username, session_key, self_private_key, ot
     return encrypted_message
 
 
+def handle_change_public_key(message, username, session_key, self_private_key, other_public_key):
+    new_public_key = rsa.PublicKey.load_pkcs1(base64.b64decode(message["new_public_key"]))
+    if not user_database.username_exists(username):
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "Username does not exist"}),
+                                                "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    key_ring_database.invalidate_all_keys(username)
+    key_ring_database.initialize_key(username, new_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
+    return encrypted_message
+
+
 def reply_chat(connection, PR):
     request_text = ""
     while True:
@@ -477,6 +490,9 @@ def reply_chat(connection, PR):
         connection.sendall(response.encode('utf-8'))
     if message['procedure'] == 'change_password':
         response = handle_change_password(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'change_public_key':
+        response = handle_change_public_key(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
 
 
