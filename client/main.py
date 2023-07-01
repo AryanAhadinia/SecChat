@@ -110,7 +110,7 @@ def handle_diffie_handshake(message):
 
     encrypted_message = proto.proto_encrypt(
         json.dumps({"procedure": "diffie_handshake",
-                    "diffie_key": sending_public_key_string}),
+                    "diffie_key": sending_public_key_string, 'nonce': message['nonce']}),
         TOKEN,
         SESSION_KEY,
         PR, SERVER_PU)
@@ -124,7 +124,7 @@ def handle_diffie_handshake(message):
     second_person_ratchet = SecondPerson(shared_key)
     second_person_ratchet.DH_ratchet = initial_key
     USERNAME_TO_RATCHET_MAPPING[src_user] = {'type': 'second', 'person_ratchet': second_person_ratchet,
-                                             'public_key': other_diffie_public_key,'shared_key': shared_key, 'shared_key': shared_key}
+                                             'public_key': other_diffie_public_key,'shared_key': shared_key}
 
     return encrypted_message
 
@@ -328,13 +328,14 @@ def handle_send():
         if dst_user == CURRENT_USERNAME:
             continue
         if USERNAME_TO_RATCHET_MAPPING.get(dst_user) is None:
+            nonce = nonce_lib.generate_nonce()
             initial_key = X25519PrivateKey.generate()
             sending_public_key = initial_key.public_key()
             sending_public_key_string = base64.b64encode(
                 sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
             encrypted_message = proto.proto_encrypt(
                 json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user,
-                            "diffie_key": sending_public_key_string}),
+                            "diffie_key": sending_public_key_string, "nonce": nonce}),
                 TOKEN,
                 SESSION_KEY,
                 PR, SERVER_PU)
@@ -345,6 +346,10 @@ def handle_send():
             if response_message['status'] == 'Failed':
                 print(response_message['message'])
                 return
+            
+            if response_message['nonce'] != nonce:
+                print("The key is not fresh")
+                return 
             
             other_diffie_public_key = response_message['diffie_key']
             other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))

@@ -203,7 +203,7 @@ def handle_diffie_handshake(message, self_private_key, token):
     connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
     
     encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "diffie handshake",
-                                                        "diffie_key": src_diffie_helman, "src_username": username}),
+                                                        "diffie_key": src_diffie_helman, "src_username": username, "nonce": message['nonce']}),
                                             "Server"
                                             , session_key, self_private_key, other_public_key)
     connection.sendall(encrypted_message.encode('utf-8'))
@@ -220,7 +220,9 @@ def handle_diffie_handshake(message, self_private_key, token):
     decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
     loaded_message = json.loads(decrypted_message)
     diffie_key = loaded_message['diffie_key']
-    encrypted_response_to_source = proto.proto_encrypt(json.dumps({"status": "OK", "diffie_key": diffie_key}), "Server",
+    encrypted_response_to_source = proto.proto_encrypt(json.dumps({"status": "OK", 
+                                                                   "diffie_key": diffie_key,
+                                                                    "nonce": loaded_message['nonce']}), "Server",
                                                        source_session_key, self_private_key,
                                                        source_public_key)
     return encrypted_response_to_source
@@ -440,7 +442,6 @@ def reply_chat(connection, PR):
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection, session_key, PR, public_key, token)
         connection.sendall(response.encode('utf-8'))
-   
     if message['procedure'] == 'create_group':
         response = handle_create_group(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
