@@ -5,6 +5,7 @@ import random
 from pathlib import Path
 import socket
 import hashlib
+import time
 
 from cryptographicio import symmetric_ratchet
 from proto import proto
@@ -39,6 +40,7 @@ def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
         "message": message,
         "signature": base64.b64encode(rsa_.sign(message, self_private_key)).decode(),
+        "time": time.time(),
     }
     signed_message_json = json.dumps(signed_message)
     encrypted_message = base64.b64encode(
