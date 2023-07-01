@@ -10,6 +10,7 @@ def create_database(path, name):
             (src_user VARCHAR(50), 
             dst_user  VARCHAR(50),
             encrypted_content TXT,
+            sign TXT,
             group_name VARCHAR(50))  
             """
 
@@ -31,13 +32,13 @@ def get_messages(path, name, username, password):
     return result
 
 
-def add_message(path, name, src_user, dst_user, encrypted_context, group_name, password):
+def add_message(path, name, src_user, dst_user, encrypted_context, group_name, sign, password):
     sql = """INSERT INTO MESSAGE (src_user, dst_user, encrypted_content, group_name) 
                             VALUES (?, ?, ?, ?)"""
     
     aes_ = aes.AESCipher(password)
     encrypted_context = aes_.encrypt(base64.b64encode(encrypted_context.encode()).decode())
 
-    args = (src_user, dst_user, encrypted_context, group_name)
+    args = (src_user, dst_user, encrypted_context, sign, group_name)
 
     database_.execute_sql(sql, args, path, name)
