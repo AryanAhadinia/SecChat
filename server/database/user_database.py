@@ -26,6 +26,7 @@ def register_user(username, hashed_password, salt):
 
     return True
 
+
 def username_exists(user_name):
     sql = """SELECT * from USER WHERE username = ?"""
     args = (user_name,)
@@ -35,6 +36,7 @@ def username_exists(user_name):
         return True
     return False
 
+
 def login_user(username, hashed_password):
     sql = """SELECT * from USER WHERE username = ? and hashed_password = ?"""
     args = (username, hashed_password)
@@ -42,3 +44,18 @@ def login_user(username, hashed_password):
     if len(result) != 0:
         return True
     return False
+
+
+def get_salt(username):
+    sql = """SELECT salt from USER WHERE username = ?"""
+    args = (username,)
+    result = database.execute_sql(sql, args)
+    if len(result) != 0:
+        return result[0][0]
+    return None
+
+
+def update_password(username, hashed_password):
+    sql = """UPDATE USER SET hashed_password = ? WHERE username = ?"""
+    args = (hashed_password, username)
+    database.execute_sql(sql, args)

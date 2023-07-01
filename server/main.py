@@ -8,6 +8,7 @@ import socket
 from _thread import *
 from cryptographicio import rsa_
 import rsa
+import time
 
 from cryptographicio import aes
 from cryptographicio import rsa_
@@ -39,6 +40,7 @@ def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
         "message": message,
         "signature": base64.b64encode(rsa_.sign(message, self_private_key)).decode(),
+        "time": time.time(),
     }
     signed_message_json = json.dumps(signed_message)
     encrypted_message = base64.b64encode(
@@ -382,6 +384,21 @@ def handle_get_groups_for_user(message, username, session_key, self_private_key,
     return encrypted_message
 
 
+def handle_change_password(message, username, session_key, self_private_key, other_public_key):
+    old_password = message['old_password']
+    new_password = message['new_password']
+    if not user_database.username_exists(username):
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "Username does not exist"}),
+                                                "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    salt = user_database.get_salt(username)
+    password_hash = hash_lib.calculate_sha256_hash(new_password + str(salt))
+    user_database.update_password(username, password_hash)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
+    return encrypted_message
+
+
 def handle_get_online_users(message, username, session_key, self_private_key, other_public_key):
     socket_tokens = list()
     sockets = list()
@@ -415,6 +432,19 @@ def handle_get_online_users(message, username, session_key, self_private_key, ot
 
     encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "online_users": users}), "Server",
                                             session_key, self_private_key, other_public_key)
+    return encrypted_message
+
+
+def handle_change_public_key(message, username, session_key, self_private_key, other_public_key):
+    new_public_key = rsa.PublicKey.load_pkcs1(base64.b64decode(message["new_public_key"]))
+    if not user_database.username_exists(username):
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "Username does not exist"}),
+                                                "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    key_ring_database.invalidate_all_keys(username)
+    key_ring_database.initialize_key(username, new_public_key)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
     return encrypted_message
 
 
@@ -460,6 +490,12 @@ def reply_chat(connection, PR):
         connection.sendall(response.encode('utf-8'))
     if message['procedure'] == 'get_online_users':
         response = handle_get_online_users(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'change_password':
+        response = handle_change_password(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'change_public_key':
+        response = handle_change_public_key(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
 
 

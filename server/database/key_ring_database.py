@@ -38,3 +38,8 @@ def get_user_valid_key(username):
 
     return rsa.PublicKey.load_pkcs1(base64.b64decode(public_key_string))
 
+
+def invalidate_all_keys(username):
+    sql = """UPDATE KEY_RING SET is_valid = 0 WHERE username = ?"""
+    args = (username,)
+    database.execute_sql(sql, args)
