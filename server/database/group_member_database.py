@@ -39,7 +39,8 @@ def remove_user_from_group(group_id, username):
 def get_group_members(group_id):
     sql = """SELECT username FROM GROUP_MEMBER WHERE group_id = ?;"""
     args = (group_id,)
-    return database.execute_sql(sql, args)
+    list_of_tuples = database.execute_sql(sql, args)
+    return [x[0] for x in list_of_tuples]
 
 
 def get_groups_for_user(username):

@@ -24,10 +24,10 @@ def add_group(name, admin_user):
 def get_group_id(name):
     sql = """SELECT group_id FROM GROUP_DB WHERE name = ?;"""
     args = (name,)
-    return database.execute_sql(sql, args)
+    return database.execute_sql(sql, args)[0][0]
 
 
 def get_group_admin(group_id):
     sql = """SELECT admin_user FROM GROUP_DB WHERE group_id = ?;"""
     args = (group_id,)
-    return database.execute_sql(sql, args)
+    return database.execute_sql(sql, args)[0][0]
