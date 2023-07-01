@@ -8,6 +8,7 @@ import socket
 from _thread import *
 from cryptographicio import rsa_
 import rsa
+import time
 
 from cryptographicio import aes
 from cryptographicio import rsa_
@@ -39,6 +40,7 @@ def encrypt_message(message, self_private_key, destination_public_key):
     signed_message = {
         "message": message,
         "signature": base64.b64encode(rsa_.sign(message, self_private_key)).decode(),
+        "time": time.time(),
     }
     signed_message_json = json.dumps(signed_message)
     encrypted_message = base64.b64encode(
