@@ -6,7 +6,7 @@ def create_database():
         CREATE TABLE IF NOT EXISTS 
         GROUP_MEMBER
         (
-			group_id INTEGER,
+			group_id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username VARCHAR (50),
 			FOREIGN KEY(group_id) REFERENCES GROUP_DB(group_id) ON DELETE RESTRICT ON UPDATE RESTRICT,
 			FOREIGN KEY(username) REFERENCES USER(username) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -26,7 +26,6 @@ def create_database():
 
 
 def add_user_to_group(group_id, username):
-    print(group_id, username)
     sql = """INSERT INTO GROUP_MEMBER (group_id, username) VALUES (?, ?);"""
     args = (group_id, username)
     database.execute_sql(sql, args)
