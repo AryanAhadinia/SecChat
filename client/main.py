@@ -474,6 +474,34 @@ def handle_get_online_members():
         print(response_message["error_message"])
 
 
+def handle_change_password():
+    global PR
+    username = CURRENT_USERNAME
+    old_password = input("Old Password: ")
+    new_password = input("New Password: ")
+    message = json.dumps({"procedure": "change_password", "username": username, "old_password": old_password, "new_password": new_password})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    
+
+    # decrypt private key and encrypt with new password
+    if response_message['status'] == "OK":
+        print("password successfully changed")
+        global PASSWORD_HASH
+        PASSWORD_HASH = hashlib.sha256(new_password.encode()).digest()
+        database_path = Path(f"client/database/databases/{CURRENT_USERNAME}")
+        database_name = f'{CURRENT_USERNAME}.db'
+        message_database.re_encrypt_messages(database_path, database_name, old_password, new_password)
+        key_path = Path(f"client/keys/client/{username}")
+        PR = rsa_.load_private_key(key_path, old_password)
+        PU = rsa_.load_public_key(key_path)
+        rsa_.write_keys(PU, PR, key_path, new_password)
+    else:
+        print(response_message["error_message"])
+
+
 def main():
     global SERVER_PU, PU, PR
     SERVER_PU = rsa_.load_public_key(Path("client/keys/server"))
@@ -502,6 +530,8 @@ def main():
             handle_view_groups()
         elif command == 'get_online_users':
             handle_get_online_members()
+        elif command == 'change_password':
+            handle_change_password()
         else:
             print("invalid command")
 

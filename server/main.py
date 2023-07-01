@@ -381,6 +381,21 @@ def handle_get_groups_for_user(message, username, session_key, self_private_key,
     return encrypted_message
 
 
+def handle_change_password(message, username, session_key, self_private_key, other_public_key):
+    old_password = message['old_password']
+    new_password = message['new_password']
+    if not user_database.username_exists(username):
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "Username does not exist"}),
+                                                "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    salt = user_database.get_salt(username)
+    password_hash = hash_lib.calculate_sha256_hash(new_password + str(salt))
+    user_database.update_password(username, password_hash)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
+                                            other_public_key)
+    return encrypted_message
+
+
 def handle_get_online_users(message, username, session_key, self_private_key, other_public_key):
     socket_tokens = list()
     sockets = list()
@@ -459,6 +474,9 @@ def reply_chat(connection, PR):
         connection.sendall(response.encode('utf-8'))
     if message['procedure'] == 'get_online_users':
         response = handle_get_online_users(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'change_password':
+        response = handle_change_password(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
 
 
