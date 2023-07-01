@@ -268,7 +268,8 @@ def handle_get_massage(message, self_private_key, token):
          "cipher": message['cipher'],
          "src_username": username,
          "group_name": group_name,
-         "target_name": message['target_name']}),
+         "target_name": message['target_name'],
+         "seq_number": message['seq_number']}),
         "Server"
         , session_key, self_private_key, other_public_key)
     connection.sendall(encrypted_message.encode('utf-8'))

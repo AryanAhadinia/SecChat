@@ -124,7 +124,7 @@ def handle_diffie_handshake(message):
     second_person_ratchet = SecondPerson(shared_key)
     second_person_ratchet.DH_ratchet = initial_key
     USERNAME_TO_RATCHET_MAPPING[src_user] = {'type': 'second', 'person_ratchet': second_person_ratchet,
-                                             'public_key': other_diffie_public_key,'shared_key': shared_key}
+                                             'public_key': other_diffie_public_key,'shared_key': shared_key, 'seq_num_rcv': 0, 'seq_num_snd': 0}
 
     return encrypted_message
 
@@ -135,6 +135,16 @@ def handle_message(message):
     src_diffie_key = message['diffie_key']
     other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(src_diffie_key))
     USERNAME_TO_RATCHET_MAPPING[src_user]['public_key'] = other_diffie_public_key
+    seq_number = message['seq_number']
+    if seq_number != USERNAME_TO_RATCHET_MAPPING[src_user]['seq_num_rcv']:
+        encrypted_message = proto.proto_encrypt(
+        json.dumps({"status": "Failed", "message": "Packet's order are not correct"}),
+        TOKEN,
+        SESSION_KEY,
+        PR, SERVER_PU)
+        del USERNAME_TO_RATCHET_MAPPING[src_user]
+        return
+    USERNAME_TO_RATCHET_MAPPING[src_user]['seq_num_rcv'] = USERNAME_TO_RATCHET_MAPPING[src_user]['seq_num_rcv'] + 1
     person_ratchet.dh_ratchet_recv(other_diffie_public_key)
     cipher = base64.b64decode(message['cipher'])
     msg = person_ratchet.recv(cipher, other_diffie_public_key)
@@ -357,7 +367,7 @@ def handle_send():
             person_ratchet = FirstPerson(shared_key)
             person_ratchet.DHratchet = initial_key
             USERNAME_TO_RATCHET_MAPPING[dst_user] = {'type': 'second', 'person_ratchet': person_ratchet,
-                                                     'public_key': other_diffie_public_key}
+                                                     'public_key': other_diffie_public_key, 'seq_num_snd': 0,  'seq_num_rcv': 0}
             print(f"new chat createded with {dst_user}" , key_sec_channel.to_emojies(shared_key))
 
         else:
@@ -371,6 +381,8 @@ def handle_send():
         cipher = person_ratchet.send(message.encode('utf-8'))
         cipher_string = base64.b64encode(cipher).decode()
 
+
+        print(USERNAME_TO_RATCHET_MAPPING[dst_user])
         encrypted_message = proto.proto_encrypt(
             json.dumps({
                 "procedure": "message",
@@ -378,7 +390,8 @@ def handle_send():
                 "cipher": cipher_string,
                 "diffie_key": new_public_key_string,
                 "group_name": group_name,
-                "target_name": target_name
+                "target_name": target_name,
+                "seq_number": USERNAME_TO_RATCHET_MAPPING[dst_user]['seq_num_snd']
             }),
             TOKEN,
             SESSION_KEY,
@@ -390,7 +403,9 @@ def handle_send():
         response_message = json.loads(response_message)
         if response_message['status'] == "OK":
             print("message successfully sent")
+            USERNAME_TO_RATCHET_MAPPING[dst_user]['seq_num_snd'] = USERNAME_TO_RATCHET_MAPPING[dst_user]['seq_num_snd']   + 1
         else:
+            del USERNAME_TO_RATCHET_MAPPING[dst_user]
             print(response_message["error_message"])
 
 
