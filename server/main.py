@@ -17,6 +17,7 @@ from proto import proto
 from database import user_database
 from database import initialize_database
 from database import group_database
+from database import group_member_database
 from cryptographicio import hash_lib
 from cryptographicio import token
 from cryptographicio import nonce_lib
@@ -248,9 +249,62 @@ def handle_create_group(message, username, session_key, self_private_key, other_
     group_name = message['group_name']
     group_admin = username
     group_database.add_group(group_name, group_admin)
-    # add admin to group users
-    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key,
-                                            other_public_key)
+    group_member_database.add_user_to_group(group_database.get_group_id(group_name), group_admin)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
+    return encrypted_message
+
+
+def handle_add_user_to_group(message, username, session_key, self_private_key, other_public_key):
+    group_name = message['group_name']
+    new_user = message['new_user']
+    group_id = group_database.get_group_id(group_name)
+    group_admin = group_database.get_group_admin(group_id)
+    if group_admin != username:
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not admin"}), "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    group_member_database.add_user_to_group(group_id, new_user)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
+    return encrypted_message
+
+
+def handle_remove_user_from_group(message, username, session_key, self_private_key, other_public_key):
+    group_name = message['group_name']
+    user_to_remove = message['user_to_remove']
+    group_id = group_database.get_group_id(group_name)
+    group_admin = group_database.get_group_admin(group_id)
+    if group_admin != username:
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not admin"}), "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    group_member_database.remove_user_from_group(group_id, user_to_remove)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
+    return encrypted_message
+
+
+def handle_get_group_members(message, username, session_key, self_private_key, other_public_key):
+    group_name = message['group_name']
+    group_id = group_database.get_group_id(group_name)
+    group_members = group_member_database.get_group_members(group_id)
+    if username not in group_members:
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not in this group"}), "Server", session_key, self_private_key, other_public_key)
+        return encrypted_message
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "group_members": group_members}), "Server", session_key, self_private_key, other_public_key)
+    return encrypted_message
+
+
+def handle_get_groups_for_user(message, username, session_key, self_private_key, other_public_key):
+    groups = group_member_database.get_groups_for_user(username)
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "groups": groups}), "Server", session_key, self_private_key, other_public_key)
+    return encrypted_message
+
+
+def handle_get_online_users(message, username, session_key, self_private_key, other_public_key):
+    live_socket_tokens = set()
+    for token, connection in TOKEN_TO_CONNECTION_MAPPING.items():
+        live_socket_tokens.add(token)
+    live_users = list()
+    for token in live_socket_tokens:
+        live_users.append(TOKENS_TO_USERNAME_MAPPING[token])
+    encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "online_users": live_users}), "Server", session_key, self_private_key, other_public_key)
     return encrypted_message
 
 
@@ -279,9 +333,24 @@ def reply_chat(connection, PR):
     if message['procedure'] == 'add_socket':
         response = handle_add_socket(connection, session_key, PR, public_key, token)
         connection.sendall(response.encode('utf-8'))
-
+        
     if message['procedure'] == 'create_group':
         response = handle_create_group(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'add_user_to_group':
+        response = handle_add_user_to_group(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'get_group_members':
+        response = handle_get_group_members(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'remove_user_from_group':
+        response = handle_remove_user_from_group(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'get_groups_for_user':
+        response = handle_get_groups_for_user(message, username, session_key, PR, public_key)
+        connection.sendall(response.encode('utf-8'))
+    if message['procedure'] == 'get_online_users':
+        response = handle_get_online_users(message, username, session_key, PR, public_key)
         connection.sendall(response.encode('utf-8'))
 
 

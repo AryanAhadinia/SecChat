@@ -4,8 +4,8 @@ SERVER -> USER HANDSHAKE_SERVER_HELLO   HTTPSL      Nonce, session key
 ------------------------------------------------------
 
 
-USER -> SERVER  REGISTER                HTTPSL      username, password, public_key
-USER -> SERVER  LOGIN                   HTTPSL      username, password
+USER -> SERVER  REGISTER                HTTPSL      [DONE]
+USER -> SERVER  LOGIN                   HTTPSL      [DONE]
 USER -> SERVER  LOGOUT                  HTTPSL      
 
 USER -> SERVER  GET_ONLINE_USERS        HTTPSL      
