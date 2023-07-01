@@ -4,6 +4,7 @@ import os
 import random
 from pathlib import Path
 import socket
+import hashlib
 
 from cryptographicio import symmetric_ratchet
 from proto import proto
@@ -31,6 +32,7 @@ SESSION_KEY = None
 SERVER_CONNECTION = None
 CURRENT_USERNAME = None
 USERNAME_TO_RATCHET_MAPPING = dict()
+PASSWORD_HASH = None
 
 
 def encrypt_message(message, self_private_key, destination_public_key):
@@ -167,7 +169,7 @@ def listen_to_server(connection, self_private_key, server_public_key):
             database_path = Path(f"client/database/databases/{CURRENT_USERNAME}")
             database_name = f'{CURRENT_USERNAME}.db'
             message_database.add_message(database_path, database_name, message['src_username'], CURRENT_USERNAME,
-                                         decrypted_message, message['group_name'])
+                                         decrypted_message, message['group_name'], PASSWORD_HASH)
             connection.sendall(response.encode('utf-8'))
 
 
@@ -237,6 +239,8 @@ def handle_login(server_public_key):
     global PR, TOKEN, SESSION_KEY, PU, CURRENT_USERNAME
     username = input("Username: ")
     password = input("Password: ")
+    global PASSWORD_HASH
+    PASSWORD_HASH = hashlib.sha256(password.encode()).digest()
     if not os.path.exists(os.path.join(Path(f"client/database/databases/{username}"), f'{username}.db')):
         print("local database does not exists. please register first")
         return
@@ -285,7 +289,7 @@ def handle_chats():
     if not os.path.exists(os.path.join(database_path, database_name)):
         print("you have no messages in this device")
 
-    results = message_database.get_messages(database_path, database_name, CURRENT_USERNAME)
+    results = message_database.get_messages(database_path, database_name, CURRENT_USERNAME, PASSWORD_HASH)
 
     for result in results:
         if result[3] != "":

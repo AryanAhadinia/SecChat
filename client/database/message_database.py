@@ -1,5 +1,7 @@
 from database import database_
 
+from cryptographicio import aes
+
 
 def create_database(path, name):
     sql = """
@@ -14,17 +16,28 @@ def create_database(path, name):
     database_.execute_sql(sql, (), path, name)
 
 
-def get_messages(path, name, username):
+def get_messages(path, name, username, password):
     sql = """SELECT * from MESSAGE WHERE
                 src_user = ? or dst_user = ? """
 
     result = database_.execute_sql(sql, (username, username), path, name)
+
+    aes_ = aes.AESCipher(password)
+    for i in range(len(result)):
+        result[i] = list(result[i])
+        result[i][2] = aes_.decrypt(result[i][2])
+        result[i] = tuple(result[i])
+
     return result
 
 
-def add_message(path, name, src_user, dst_user, encrypted_context, group_name):
+def add_message(path, name, src_user, dst_user, encrypted_context, group_name, password):
     sql = """INSERT INTO MESSAGE (src_user, dst_user, encrypted_content, group_name) 
                             VALUES (?, ?, ?, ?)"""
+    
+    aes_ = aes.AESCipher(password)
+    encrypted_context = aes_.encrypt(encrypted_context)
+
     args = (src_user, dst_user, encrypted_context, group_name)
 
     database_.execute_sql(sql, args, path, name)
