@@ -117,12 +117,12 @@ def handle_diffie_handshake(message):
     other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(src_diffie_key))
     shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
 
-    print(key_sec_channel.to_emojies(shared_key))
+    print(f"new chat createded with {src_user}" , key_sec_channel.to_emojies(shared_key))
 
     second_person_ratchet = SecondPerson(shared_key)
     second_person_ratchet.DH_ratchet = initial_key
     USERNAME_TO_RATCHET_MAPPING[src_user] = {'type': 'second', 'person_ratchet': second_person_ratchet,
-                                             'public_key': other_diffie_public_key}
+                                             'public_key': other_diffie_public_key,'shared_key': shared_key, 'shared_key': shared_key}
 
     return encrypted_message
 
@@ -290,6 +290,7 @@ def handle_chats():
     for result in results:
         if result[3] != "":
             print(f"In Group: {result[3]}")
+
         print(f"from {result[0]} to {result[1]}:")
         print(result[2])
 
@@ -346,6 +347,8 @@ def handle_send():
             person_ratchet.DHratchet = initial_key
             USERNAME_TO_RATCHET_MAPPING[dst_user] = {'type': 'second', 'person_ratchet': person_ratchet,
                                                      'public_key': other_diffie_public_key}
+            print(f"new chat createded with {dst_user}" , key_sec_channel.to_emojies(shared_key))
+
         else:
             print(USERNAME_TO_RATCHET_MAPPING[dst_user])
             person_ratchet = USERNAME_TO_RATCHET_MAPPING[dst_user]['person_ratchet']
