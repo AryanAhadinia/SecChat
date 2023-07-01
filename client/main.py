@@ -66,8 +66,13 @@ def send_receive(message, host, port):
     server_socket = socket.socket()
     server_socket.connect((host, port))
     server_socket.sendall(message.encode('utf-8'))
-    data = server_socket.recv(1024)
-    response += data.decode()
+    while True:
+        data = server_socket.recv(1024)
+        if data is None:
+            break
+        response += data.decode('utf-8')
+        if len(data) < 1024:
+            break
     return response, server_socket
 
 
@@ -301,7 +306,13 @@ def handle_send():
     elif target.upper() == 'G':
         target_name = input("Dest Group: ")
         dst_users = handle_get_group_members(target_name)
+        if dst_users is None:
+            return
         group_name = target_name
+    else:
+        print("Invalid character")
+        return
+
     message = input(f"{target_name} << ")
     for dst_user in dst_users:
         if dst_user == CURRENT_USERNAME:
@@ -320,6 +331,11 @@ def handle_send():
             encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
             response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
             response_message = json.loads(response_message)
+            
+            if response_message['status'] == 'Failed':
+                print(response_message['message'])
+                return
+            
             other_diffie_public_key = response_message['diffie_key']
             other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))
             shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
@@ -412,7 +428,8 @@ def handle_get_group_members(group_name):
     if response_message['status'] == "OK":
         return response_message['group_members']
     else:
-        print(response_message["error_message"])
+        print(response_message["message"])
+        return None
 
 
 def handle_view_groups():

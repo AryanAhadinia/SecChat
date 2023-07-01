@@ -20,7 +20,10 @@ def add_group(name, admin_user):
     args = (name, admin_user)
     database.execute_sql(sql, args)
 
-
+def group_exists(name):
+    sql = """SELECT group_id FROM GROUP_DB WHERE name = ?;"""
+    args = (name,)
+    return len(database.execute_sql(sql, args))
 def get_group_id(name):
     sql = """SELECT group_id FROM GROUP_DB WHERE name = ?;"""
     args = (name,)

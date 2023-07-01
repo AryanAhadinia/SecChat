@@ -26,6 +26,14 @@ def register_user(username, hashed_password, salt):
 
     return True
 
+def username_exists(user_name):
+    sql = """SELECT * from USER WHERE username = ?"""
+    args = (user_name,)
+    result = database.execute_sql(sql, args)
+    print(result)
+    if len(result) != 0:
+        return True
+    return False
 
 def login_user(username, hashed_password):
     sql = """SELECT * from USER WHERE username = ? and hashed_password = ?"""

@@ -183,12 +183,23 @@ def get_token_from_username(username):
 
 def handle_diffie_handshake(message, self_private_key, token):
     dst_username = message['dst_user']
-    session_key = get_sessionkey_from_username(dst_username)
-    dst_token = get_token_from_username(dst_username)
-    connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
     username = TOKENS_TO_USERNAME_MAPPING[token]
     src_diffie_helman = message['diffie_key']
+    source_session_key = TOKEN_TO_AES_MAPPING[token]
+    source_public_key = key_ring_database.get_user_valid_key(username)
+
+    if not user_database.username_exists(dst_username):
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "Username does not exist"
+                                                        }),
+                                            "Server"
+                                          , source_session_key, self_private_key, source_public_key)
+        return encrypted_message
     other_public_key = key_ring_database.get_user_valid_key(dst_username)
+    dst_token = get_token_from_username(dst_username)
+    session_key = get_sessionkey_from_username(dst_username)
+    
+    connection = TOKEN_TO_CONNECTION_MAPPING[dst_token]
+    
     encrypted_message = proto.proto_encrypt(json.dumps({"procedure": "diffie handshake",
                                                         "diffie_key": src_diffie_helman, "src_username": username}),
                                             "Server"
@@ -203,13 +214,11 @@ def handle_diffie_handshake(message, self_private_key, token):
         if len(data) < 1024:
             break
 
-    source_session_key = TOKEN_TO_AES_MAPPING[token]
-    source_public_key = key_ring_database.get_user_valid_key(username)
-
+    
     decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
     loaded_message = json.loads(decrypted_message)
     diffie_key = loaded_message['diffie_key']
-    encrypted_response_to_source = proto.proto_encrypt(json.dumps({"diffie_key": diffie_key}), "Server",
+    encrypted_response_to_source = proto.proto_encrypt(json.dumps({"status": "OK", "diffie_key": diffie_key}), "Server",
                                                        source_session_key, self_private_key,
                                                        source_public_key)
     return encrypted_response_to_source
@@ -223,38 +232,39 @@ def handle_get_massage(message, self_private_key, token):
     username = TOKENS_TO_USERNAME_MAPPING[token]
     src_diffie_helman = message['diffie_key']
     other_public_key = key_ring_database.get_user_valid_key(dst_username)
-    src_public_key = key_ring_database.get_user_valid_key(username)
-
+    source_session_key = TOKEN_TO_AES_MAPPING[token]
+    source_public_key = key_ring_database.get_user_valid_key(username)
     group_name = message['group_name']
-    try:
-        group_id = group_database.get_group_id(group_name)
-    except:
-        response = proto.proto_encrypt(
-            json.dumps({"status": "error", "error_message": "this group is not valid or you are not in it"}),
-            # this group is not valid
-            token,
-            TOKEN_TO_AES_MAPPING[token],
-            self_private_key,
-            src_public_key)
-        return response
+    if message['target_name'] == 'G':
+        try:
+            group_id = group_database.get_group_id(group_name)
+        except:
+            response = proto.proto_encrypt(
+                json.dumps({"status": "error", "error_message": "this group is not valid or you are not in it"}),
+                "Server",
+                TOKEN_TO_AES_MAPPING[token],
+                self_private_key,
+                source_public_key)
+            return response
 
-    members = group_member_database.get_group_members(group_id)
-    if username not in members:
-        response = proto.proto_encrypt(
-            json.dumps({"status": "error", "error_message": "this group is not valid or you are not in it"}),
-            # you are not in this group
-            token,
-            TOKEN_TO_AES_MAPPING[token],
-            self_private_key,
-            src_public_key)
-        return response
+        members = group_member_database.get_group_members(group_id)
+        if username not in members:
+            response = proto.proto_encrypt(
+                json.dumps({"status": "error", "error_message": "this group is not valid or you are not in it"}),
+                
+                "Server",
+                TOKEN_TO_AES_MAPPING[token],
+                self_private_key,
+                source_public_key)
+            return response
 
     encrypted_message = proto.proto_encrypt(json.dumps(
         {"procedure": "message",
          "diffie_key": src_diffie_helman,
          "cipher": message['cipher'],
          "src_username": username,
-         "group_name": group_name}),
+         "group_name": group_name,
+         "target_name": message['target_name']}),
         "Server"
         , session_key, self_private_key, other_public_key)
     connection.sendall(encrypted_message.encode('utf-8'))
@@ -267,9 +277,7 @@ def handle_get_massage(message, self_private_key, token):
         if len(data) < 1024:
             break
 
-    source_session_key = TOKEN_TO_AES_MAPPING[token]
-    source_public_key = key_ring_database.get_user_valid_key(username)
-
+    
     decrypted_message = proto.proto_decrypt(diffie_response, session_key, self_private_key, other_public_key)
     loaded_message = json.loads(decrypted_message)
     encrypted_response_to_source = proto.proto_encrypt(json.dumps({"status": loaded_message['status']}), "Server",
@@ -313,9 +321,14 @@ def handle_add_user_to_group(message, username, session_key, self_private_key, o
             other_public_key)
         return encrypted_message
     try:
-        
-        group_member_database.add_user_to_group(group_id, new_user)
-    except:
+        if user_database.username_exists(new_user):
+            group_member_database.add_user_to_group(group_id, new_user)
+        else:
+            encrypted_message = proto.proto_encrypt(
+            json.dumps({"status": "Failed", "message": "Username does not exist"}), "Server", session_key,
+            self_private_key, other_public_key)
+            return encrypted_message
+    except Exception as e:
         encrypted_message = proto.proto_encrypt(
             json.dumps({"status": "Failed", "message": "Operation failed. Already in"}), "Server", session_key,
             self_private_key, other_public_key)
@@ -342,10 +355,14 @@ def handle_remove_user_from_group(message, username, session_key, self_private_k
 
 def handle_get_group_members(message, username, session_key, self_private_key, other_public_key):
     group_name = message['group_name']
+    if not group_database.group_exists(group_name):
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message":"You are not in this group"}), "Server",
+                                                session_key, self_private_key, other_public_key)
+        return encrypted_message
     group_id = group_database.get_group_id(group_name)
     group_members = group_member_database.get_group_members(group_id)
     if username not in group_members:
-        encrypted_message = proto.proto_encrypt(json.dumps({"status": "You are not in this group"}), "Server",
+        encrypted_message = proto.proto_encrypt(json.dumps({"status": "Failed", "message": "You are not in this group"}), "Server",
                                                 session_key, self_private_key, other_public_key)
         return encrypted_message
     encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK", "group_members": group_members}), "Server",
