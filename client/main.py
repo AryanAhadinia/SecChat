@@ -286,50 +286,67 @@ def handle_send():
         print("please login first")
         return
 
-    dst_user = input("Dest Username: ")
-    if USERNAME_TO_RATCHET_MAPPING.get(dst_user) is None:
-        initial_key = X25519PrivateKey.generate()
-        sending_public_key = initial_key.public_key()
-        sending_public_key_string = base64.b64encode(
-            sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+    target = input("Target (I/G): ").upper()
+    if target.upper() == 'I':
+        target_name = input("Dest Username: ")
+        dst_users = [target_name]
+    elif target.upper() == 'G':
+        target_name = input("Dest Group: ")
+        dst_users = handle_get_group_members(target_name)
+    message = input(f"{target_name} << ")
+    for dst_user in dst_users:
+        if USERNAME_TO_RATCHET_MAPPING.get(dst_user) is None:
+            initial_key = X25519PrivateKey.generate()
+            sending_public_key = initial_key.public_key()
+            sending_public_key_string = base64.b64encode(
+                sending_public_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+            encrypted_message = proto.proto_encrypt(
+                json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user,
+                            "diffie_key": sending_public_key_string}),
+                TOKEN,
+                SESSION_KEY,
+                PR, SERVER_PU)
+            encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+            response_message,_ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+            response_message = json.loads(response_message)
+            other_diffie_public_key = response_message['diffie_key']
+            other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))
+            shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
+            person_ratchet = FirstPerson(shared_key)
+            person_ratchet.DHratchet = initial_key
+            USERNAME_TO_RATCHET_MAPPING[dst_user] = {'type': 'second', 'person_ratchet':  person_ratchet,
+                                                    'public_key':other_diffie_public_key}
+        else:
+            print(USERNAME_TO_RATCHET_MAPPING[dst_user])
+            person_ratchet = USERNAME_TO_RATCHET_MAPPING[dst_user]['person_ratchet']
+            other_diffie_public_key = USERNAME_TO_RATCHET_MAPPING[dst_user]['public_key']
+
+        new_pub_key = person_ratchet.dh_ratchet_send(other_diffie_public_key)
+        new_public_key_string = base64.b64encode(
+                new_pub_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
+        cipher = person_ratchet.send(message.encode('utf-8'))
+        cipher_string = base64.b64encode(cipher).decode()
         encrypted_message = proto.proto_encrypt(
-            json.dumps({"procedure": "diffie_handshake", "dst_user": dst_user,
-                        "diffie_key": sending_public_key_string}),
-            TOKEN,
-            SESSION_KEY,
-            PR, SERVER_PU)
+            json.dumps({
+                "procedure": "message",
+                "dst_user": dst_user,
+                "cipher": cipher_string,
+                "diffie_key":new_public_key_string,
+                "type": target.upper(),
+                "target_name": target_name
+                }), 
+                TOKEN,
+                SESSION_KEY,
+                PR,
+                SERVER_PU
+            )
         encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
         response_message,_ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
         response_message = json.loads(response_message)
-        other_diffie_public_key = response_message['diffie_key']
-        other_diffie_public_key = X25519PublicKey.from_public_bytes(base64.b64decode(other_diffie_public_key))
-        shared_key = hkdf(initial_key.exchange(other_diffie_public_key), 32)
-        person_ratchet = FirstPerson(shared_key)
-        person_ratchet.DHratchet = initial_key
-        USERNAME_TO_RATCHET_MAPPING[dst_user] = {'type': 'second', 'person_ratchet':  person_ratchet,
-                                                 'public_key':other_diffie_public_key}
-    else:
-        print(USERNAME_TO_RATCHET_MAPPING[dst_user])
-        person_ratchet = USERNAME_TO_RATCHET_MAPPING[dst_user]['person_ratchet']
-        other_diffie_public_key = USERNAME_TO_RATCHET_MAPPING[dst_user]['public_key']
-
-    message = input(">> ")
-    new_pub_key = person_ratchet.dh_ratchet_send(other_diffie_public_key)
-    new_public_key_string = base64.b64encode(
-            new_pub_key.public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
-    cipher = person_ratchet.send(message.encode('utf-8'))
-    cipher_string = base64.b64encode(cipher).decode()
-    encrypted_message = proto.proto_encrypt(
-        json.dumps({"procedure": "message", "dst_user": dst_user, "cipher": cipher_string,"diffie_key":new_public_key_string}), TOKEN, SESSION_KEY,
-        PR,
-        SERVER_PU)
-    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
-    response_message,_ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
-    response_message = json.loads(response_message)
-    if response_message['status'] == "OK":
-        print("message successfully sent")
-    else:
-        print(response_message["error_message"])
+        if response_message['status'] == "OK":
+            print("message successfully sent")
+        else:
+            print(response_message["error_message"])
 
 
 def handle_create_group():
@@ -369,6 +386,18 @@ def handle_remove_user_from_group():
     response_message = json.loads(response_message)
     if response_message['status'] == "OK":
         print("user successfully removed from group")
+    else:
+        print(response_message["error_message"])
+
+
+def handle_get_group_members(group_name):
+    message = json.dumps({"procedure": "get_group_members", "group_name": group_name})
+    encrypted_message = proto.proto_encrypt(message, TOKEN, SESSION_KEY, PR, SERVER_PU)
+    encrypted_response, _ = send_receive(encrypted_message, HOST, DOWNSTREAM_PORT)
+    response_message, _ = proto.proto_decrypt(encrypted_response, SESSION_KEY, PR, SERVER_PU)
+    response_message = json.loads(response_message)
+    if response_message['status'] == "OK":
+        return response_message['group_members']
     else:
         print(response_message["error_message"])
 
