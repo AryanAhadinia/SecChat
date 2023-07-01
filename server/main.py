@@ -249,6 +249,7 @@ def handle_create_group(message, username, session_key, self_private_key, other_
     group_name = message['group_name']
     group_admin = username
     group_database.add_group(group_name, group_admin)
+    print(group_database.get_group_id(group_name))
     group_member_database.add_user_to_group(group_database.get_group_id(group_name), group_admin)
     encrypted_message = proto.proto_encrypt(json.dumps({"status": "OK"}), "Server", session_key, self_private_key, other_public_key)
     return encrypted_message
